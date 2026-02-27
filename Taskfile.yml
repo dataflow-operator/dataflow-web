@@ -1,0 +1,116 @@
+# Taskfile for dataflow-web: build and dev mode.
+# Install: https://taskfile.dev/install (go install github.com/go-task/task/v3/cmd/task@latest)
+# Run: task <task_name>
+
+version: '3'
+
+vars:
+  BIND: ':8080'
+  WEB_DIR: web
+
+tasks:
+  # Install dependencies
+  install:
+    desc: Install Go and frontend dependencies
+    deps: [install:backend, install:frontend]
+    # cmds:
+    #   - go mod download
+    #   - cd {{.WEB_DIR}} && npm install
+
+  install:frontend:
+    desc: Install frontend dependencies
+    dir: '{{.WEB_DIR}}'
+    env:
+      NODE_OPTIONS: '--max-old-space-size=4096'
+    cmds:
+      - npm install
+
+  install:backend:
+    desc: Install Go dependencies
+    cmds:
+      - go mod download
+
+  # Build frontend (Vue)
+  web:build:
+    desc: Build frontend into web/dist
+    dir: '{{.WEB_DIR}}'
+    cmds:
+      - npm run build
+    sources:
+      - '{{.WEB_DIR}}/src/**/*'
+      - '{{.WEB_DIR}}/index.html'
+      - '{{.WEB_DIR}}/vite.config.js'
+      - '{{.WEB_DIR}}/package.json'
+    generates:
+      - '{{.WEB_DIR}}/dist/index.html'
+
+  # Copy built frontend to static/ for go run
+  build:static:
+    desc: Copy web/dist to static/ for local server run
+    deps: [web:build]
+    cmds:
+      - mkdir -p static
+      - cp -r {{.WEB_DIR}}/dist/* static/
+
+  # Build Go binary
+  build:go:
+    desc: Build Go server binary (server)
+    cmds:
+      - go build -o server ./cmd/server
+    sources:
+      - cmd/**/*
+      - internal/**/*
+      - go.mod
+      - go.sum
+    generates:
+      - server
+
+  # Full build: frontend + static + Go
+  build:
+    desc: Build project (frontend + static + server)
+    deps: [build:static, build:go]
+
+  # Run server (requires prior build)
+  run:
+    desc: Run server on {{.BIND}} (requires build task)
+    cmds:
+      - ./server --bind-address={{.BIND}}
+    preconditions:
+      - test -f server
+      - test -d static
+
+  # Dev mode: backend and frontend with hot reload (both in one shell, Ctrl+C stops both)
+  dev:
+    desc: Dev mode — backend ({{.BIND}}) + Vite dev (proxy to API)
+    deps: [dev:backend, dev:frontend]
+
+  dev:backend:
+    desc: Run Go server for development (use "task dev" for both)
+    deps: [install:backend]
+    cmds:
+      - bash -c 'export KUBECONFIG="${HOME}/.kube/config"; exec go run ./cmd/server --bind-address={{.BIND}}'
+
+  dev:frontend:
+    desc: Run Vite dev server (use "task dev" for both)
+    dir: '{{.WEB_DIR}}'
+    deps: [install:frontend]
+    cmds:
+      - npm run dev
+
+  # Frontend tests
+  web:test:
+    desc: Run frontend tests (Vitest)
+    dir: '{{.WEB_DIR}}'
+    cmds:
+      - npm run test:run
+
+  # Build Docker image
+  docker:
+    desc: Build Docker image dataflow-web
+    cmds:
+      - docker build -t dataflow-web:local .
+
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
