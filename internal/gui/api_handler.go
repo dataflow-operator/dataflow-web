@@ -328,13 +328,64 @@ func (h *APIHandler) handleMetrics(w http.ResponseWriter, r *http.Request, parts
 		return
 	}
 
-	metrics := map[string]interface{}{
-		"namespace": namespace,
-		"name":      name,
-		"metrics":   map[string]interface{}{},
+	if h.server.operatorMetricsURL == "" {
+		metrics := map[string]interface{}{
+			"namespace": namespace,
+			"name":      name,
+			"metrics":   map[string]interface{}{},
+		}
+		json.NewEncoder(w).Encode(metrics)
+		return
 	}
 
-	json.NewEncoder(w).Encode(metrics)
+	metricsURL := strings.TrimSuffix(h.server.operatorMetricsURL, "/") + "/metrics"
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, metricsURL, nil)
+	if err != nil {
+		h.server.logger.Error(err, "Failed to create metrics request")
+		http.Error(w, "Failed to create metrics request", http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		h.server.logger.Error(err, "Failed to fetch metrics from operator")
+		http.Error(w, "Failed to fetch metrics from operator", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		h.server.logger.Info("Operator metrics returned non-200", "status", resp.StatusCode)
+		http.Error(w, fmt.Sprintf("Operator metrics returned %d", resp.StatusCode), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	filterPrometheusByDataFlow(resp.Body, w, namespace, name)
+}
+
+// filterPrometheusByDataFlow reads Prometheus text format from src and writes to dst
+// only lines for dataflow_* metrics with namespace and name labels matching the given DataFlow.
+func filterPrometheusByDataFlow(src io.Reader, dst io.Writer, namespace, name string) {
+	nsMatch := `namespace="` + namespace + `"`
+	nameMatch := `name="` + name + `"`
+	scanner := bufio.NewScanner(src)
+	const maxLineSize = 64 * 1024
+	buf := make([]byte, 0, maxLineSize)
+	scanner.Buffer(buf, maxLineSize)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") {
+			if strings.Contains(line, "dataflow_") {
+				fmt.Fprintln(dst, line)
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "dataflow_") && strings.Contains(line, nsMatch) && strings.Contains(line, nameMatch) {
+			fmt.Fprintln(dst, line)
+		}
+	}
 }
 
 func (h *APIHandler) handleStatus(w http.ResponseWriter, r *http.Request, parts []string) {

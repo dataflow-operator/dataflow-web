@@ -34,6 +34,10 @@ import (
 var ctx = context.Background()
 
 func setupTestServer() (*Server, error) {
+	return setupTestServerWithMetricsURL("")
+}
+
+func setupTestServerWithMetricsURL(operatorMetricsURL string) (*Server, error) {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(dataflowv1.AddToScheme(scheme))
@@ -41,9 +45,10 @@ func setupTestServer() (*Server, error) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	server := &Server{
-		client:    fakeClient,
-		k8sClient: nil, // not needed for dataflow CRUD tests
-		logger:    ctrl.Log.WithName("test"),
+		client:              fakeClient,
+		k8sClient:           nil, // not needed for dataflow CRUD tests
+		logger:              ctrl.Log.WithName("test"),
+		operatorMetricsURL:   operatorMetricsURL,
 	}
 
 	return server, nil
@@ -205,6 +210,126 @@ func TestAPIHandler_DeleteDataFlow(t *testing.T) {
 	var result dataflowv1.DataFlow
 	if err := server.client.Get(ctx, client.ObjectKey{Namespace: "default", Name: "test-dataflow"}, &result); err == nil {
 		t.Error("Expected DataFlow to be deleted, but it still exists")
+	}
+}
+
+func TestAPIHandler_Metrics_RequiresNamespaceAndName(t *testing.T) {
+	server, err := setupTestServer()
+	if err != nil {
+		t.Fatalf("Failed to setup test server: %v", err)
+	}
+	handler := NewAPIHandler(server)
+
+	for _, tc := range []struct {
+		query string
+	}{
+		{"?"},
+		{"?namespace=default"},
+		{"?name=foo"},
+	} {
+		req := httptest.NewRequest("GET", "/metrics"+tc.query, nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("query %q: expected 400, got %d", tc.query, w.Code)
+		}
+	}
+}
+
+func TestAPIHandler_Metrics_StubWhenNoOperatorURL(t *testing.T) {
+	server, err := setupTestServer()
+	if err != nil {
+		t.Fatalf("Failed to setup test server: %v", err)
+	}
+	handler := NewAPIHandler(server)
+
+	req := httptest.NewRequest("GET", "/metrics?namespace=default&name=myflow", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if w.Header().Get("Content-Type") != "application/json" {
+		t.Errorf("Expected application/json, got %s", w.Header().Get("Content-Type"))
+	}
+	var out map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&out); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+	if out["namespace"] != "default" || out["name"] != "myflow" {
+		t.Errorf("Expected namespace=default, name=myflow, got %v", out)
+	}
+	metrics, ok := out["metrics"].(map[string]interface{})
+	if !ok || len(metrics) != 0 {
+		t.Errorf("Expected empty metrics map, got %v", out["metrics"])
+	}
+}
+
+func TestAPIHandler_Metrics_ProxyFromOperator(t *testing.T) {
+	promOutput := `# HELP dataflow_messages_received_total Total messages received
+# TYPE dataflow_messages_received_total counter
+dataflow_messages_received_total{namespace="default",name="myflow",source_type="kafka"} 100
+dataflow_messages_received_total{namespace="other",name="otherflow",source_type="kafka"} 50
+# HELP go_goroutines Number of goroutines
+# TYPE go_goroutines gauge
+go_goroutines 10
+`
+	mockOperator := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/metrics" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		w.Write([]byte(promOutput))
+	}))
+	defer mockOperator.Close()
+
+	server, err := setupTestServerWithMetricsURL(mockOperator.URL)
+	if err != nil {
+		t.Fatalf("Failed to setup test server: %v", err)
+	}
+	handler := NewAPIHandler(server)
+
+	req := httptest.NewRequest("GET", "/metrics?namespace=default&name=myflow", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `dataflow_messages_received_total{namespace="default",name="myflow"`) {
+		t.Errorf("Expected filtered metrics for default/myflow, got: %s", body)
+	}
+	if strings.Contains(body, `namespace="other"`) {
+		t.Errorf("Should not include metrics from other namespace: %s", body)
+	}
+	if strings.Contains(body, "go_goroutines") {
+		t.Errorf("Should not include non-dataflow metrics: %s", body)
+	}
+}
+
+func TestFilterPrometheusByDataFlow(t *testing.T) {
+	input := `# HELP dataflow_foo A metric
+# TYPE dataflow_foo counter
+dataflow_foo{namespace="ns1",name="n1"} 1
+dataflow_foo{namespace="ns2",name="n2"} 2
+# HELP go_goroutines Goroutines
+# TYPE go_goroutines gauge
+go_goroutines 5
+`
+	var buf bytes.Buffer
+	filterPrometheusByDataFlow(strings.NewReader(input), &buf, "ns1", "n1")
+	out := buf.String()
+	if !strings.Contains(out, `dataflow_foo{namespace="ns1",name="n1"} 1`) {
+		t.Errorf("Expected ns1/n1 metric: %s", out)
+	}
+	if strings.Contains(out, `namespace="ns2"`) {
+		t.Errorf("Should not include ns2: %s", out)
+	}
+	if strings.Contains(out, "go_goroutines") {
+		t.Errorf("Should not include go_goroutines: %s", out)
 	}
 }
 

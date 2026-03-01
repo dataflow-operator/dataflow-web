@@ -86,7 +86,7 @@ export async function getStatus(namespace, name) {
 }
 
 export async function getMetrics(namespace, name) {
-  return request(
+  return requestText(
     `/metrics?namespace=${encodeURIComponent(namespace)}&name=${encodeURIComponent(name)}`
   )
 }
