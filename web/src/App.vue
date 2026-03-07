@@ -8,6 +8,7 @@
           <router-link to="/manifests">{{ t('nav.manifests') }}</router-link>
           <router-link to="/logs">{{ t('nav.logs') }}</router-link>
           <router-link to="/metrics">{{ t('nav.metrics') }}</router-link>
+          <router-link to="/events">{{ t('nav.events') }}</router-link>
         </nav>
         <div class="header-controls">
           <select

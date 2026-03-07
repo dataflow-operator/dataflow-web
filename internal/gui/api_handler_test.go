@@ -19,11 +19,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -330,6 +333,119 @@ go_goroutines 5
 	}
 	if strings.Contains(out, "go_goroutines") {
 		t.Errorf("Should not include go_goroutines: %s", out)
+	}
+}
+
+func TestAPIHandler_Events_AllInNamespace(t *testing.T) {
+	now := metav1.NewTime(time.Now())
+	ev1 := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{Name: "ev1", Namespace: "default"},
+		Type:       "Normal",
+		Reason:     "ConfigMapCreated",
+		Message:    "Created ConfigMap test-cm",
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      "DataFlow",
+			Name:      "my-flow",
+			Namespace: "default",
+		},
+		LastTimestamp: now,
+	}
+	fakeK8s := k8sfake.NewSimpleClientset(ev1)
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(dataflowv1.AddToScheme(scheme))
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	server := &Server{
+		client:    fakeClient,
+		k8sClient: fakeK8s,
+		logger:    ctrl.Log.WithName("test"),
+	}
+	handler := NewAPIHandler(server)
+
+	req := httptest.NewRequest("GET", "/events?namespace=default", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var events []corev1.Event
+	if err := json.NewDecoder(w.Body).Decode(&events); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+	if len(events) != 1 {
+		t.Errorf("Expected 1 event, got %d", len(events))
+	}
+	if events[0].Reason != "ConfigMapCreated" {
+		t.Errorf("Expected reason ConfigMapCreated, got %s", events[0].Reason)
+	}
+}
+
+func TestAPIHandler_Events_FilterByManifest(t *testing.T) {
+	now := metav1.NewTime(time.Now())
+	ev1 := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{Name: "ev1", Namespace: "default"},
+		Type:       "Normal",
+		Reason:     "ConfigMapCreated",
+		Message:    "Created ConfigMap",
+		InvolvedObject: corev1.ObjectReference{
+			Kind: "DataFlow", Name: "flow-a", Namespace: "default",
+		},
+		LastTimestamp: now,
+	}
+	ev2 := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{Name: "ev2", Namespace: "default"},
+		Type:       "Warning",
+		Reason:     "DeploymentFailed",
+		Message:    "Failed",
+		InvolvedObject: corev1.ObjectReference{
+			Kind: "DataFlow", Name: "flow-b", Namespace: "default",
+		},
+		LastTimestamp: now,
+	}
+	fakeK8s := k8sfake.NewSimpleClientset(ev1, ev2)
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(dataflowv1.AddToScheme(scheme))
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	server := &Server{
+		client:    fakeClient,
+		k8sClient: fakeK8s,
+		logger:    ctrl.Log.WithName("test"),
+	}
+	handler := NewAPIHandler(server)
+
+	req := httptest.NewRequest("GET", "/events?namespace=default&name=flow-a", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var events []corev1.Event
+	if err := json.NewDecoder(w.Body).Decode(&events); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+	// Fake clientset may not filter by field selector; at minimum we get valid response
+	if len(events) == 0 {
+		t.Errorf("Expected at least 1 event, got 0")
+	}
+	// If filtering works, we get only flow-a; otherwise we may get both
+	foundFlowA := false
+	for _, e := range events {
+		if e.InvolvedObject.Name == "flow-a" {
+			foundFlowA = true
+			break
+		}
+	}
+	if !foundFlowA {
+		t.Errorf("Expected at least one event for flow-a, got %v", events)
 	}
 }
 

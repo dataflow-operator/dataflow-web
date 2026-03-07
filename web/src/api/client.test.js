@@ -8,6 +8,7 @@ import {
   deleteDataFlow,
   getLogs,
   getStatus,
+  getEvents,
 } from './client'
 
 describe('API client', () => {
@@ -91,6 +92,26 @@ describe('API client', () => {
     const result = await getStatus('default', 'df1')
     expect(result.phase).toBe('Running')
     expect(result.processedCount).toBe(10)
+  })
+
+  it('getEvents returns all events when name is null', async () => {
+    const events = [{ type: 'Normal', reason: 'ConfigMapCreated', message: 'Created ConfigMap' }]
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(events) })
+    const result = await getEvents('default')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\?namespace=default$/),
+      expect.any(Object)
+    )
+    expect(result).toEqual(events)
+  })
+
+  it('getEvents adds name param when filtering by manifest', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+    await getEvents('default', 'my-dataflow')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/name=my-dataflow/),
+      expect.any(Object)
+    )
   })
 
   it('throws on non-ok response', async () => {

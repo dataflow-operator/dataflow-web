@@ -26,6 +26,12 @@ const routes = [
     component: () => import('../views/MetricsView.vue'),
     meta: { titleKey: 'nav.metrics' },
   },
+  {
+    path: '/events',
+    name: 'events',
+    component: () => import('../views/EventsView.vue'),
+    meta: { titleKey: 'nav.events' },
+  },
 ]
 
 const router = createRouter({

@@ -63,15 +63,6 @@ cd dataflow-web/web && npm install && npm run dev
 
 Open http://localhost:8080 (option 1) or http://localhost:5173 (option 2). Cluster access requires `KUBECONFIG` or in-cluster config.
 
-## Deploying to cluster (Helm)
+## Deploying to cluster
 
-With GUI enabled, set the dataflow-web image:
-
-```bash
-helm upgrade --install dataflow-operator ./helm-charts/dataflow-operator \
-  --set image.repository=... \
-  --set image.tag=... \
-  --set gui.enabled=true \
-  --set gui.image.repository=dataflow-web \
-  --set gui.image.tag=local
-```
+Deploy via Helm with `gui.enabled=true`. See [Web GUI documentation](../docs/docs/en/gui.md) for configuration and deployment details.

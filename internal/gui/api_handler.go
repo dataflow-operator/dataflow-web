@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -83,6 +84,8 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleStatus(w, r, filteredParts[1:])
 	case filteredParts[0] == "namespaces":
 		h.handleNamespaces(w, r)
+	case filteredParts[0] == "events":
+		h.handleEvents(w, r)
 	default:
 		http.Error(w, "Not found", http.StatusNotFound)
 	}
@@ -419,6 +422,45 @@ func (h *APIHandler) handleStatus(w http.ResponseWriter, r *http.Request, parts 
 	}
 
 	json.NewEncoder(w).Encode(status)
+}
+
+func (h *APIHandler) handleEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	namespace := r.URL.Query().Get("namespace")
+	if namespace == "" {
+		namespace = "default"
+	}
+	name := r.URL.Query().Get("name")
+
+	fieldSelector := "involvedObject.kind=DataFlow"
+	if name != "" {
+		fieldSelector += ",involvedObject.name=" + name
+	}
+
+	events, err := h.server.k8sClient.CoreV1().Events(namespace).List(r.Context(), metav1.ListOptions{
+		FieldSelector: fieldSelector,
+	})
+	if err != nil {
+		h.server.logger.Error(err, "Failed to list events")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	items := events.Items
+	sort.Slice(items, func(i, j int) bool {
+		return items[j].LastTimestamp.Before(&items[i].LastTimestamp)
+	})
+
+	const maxEvents = 100
+	if len(items) > maxEvents {
+		items = items[:maxEvents]
+	}
+
+	json.NewEncoder(w).Encode(items)
 }
 
 func (h *APIHandler) handleNamespaces(w http.ResponseWriter, r *http.Request) {

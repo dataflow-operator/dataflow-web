@@ -90,3 +90,9 @@ export async function getMetrics(namespace, name) {
     `/metrics?namespace=${encodeURIComponent(namespace)}&name=${encodeURIComponent(name)}`
   )
 }
+
+export async function getEvents(namespace, name = null) {
+  const params = new URLSearchParams({ namespace })
+  if (name) params.set('name', name)
+  return request(`/events?${params.toString()}`)
+}
