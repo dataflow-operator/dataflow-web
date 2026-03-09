@@ -1,4 +1,6 @@
 # Stage 1: build frontend (Vue + Vite)
+# VERSION is passed at build time for image labels (semver from CI)
+ARG VERSION=dev
 FROM node:22-alpine AS frontend
 WORKDIR /workspace/web
 COPY web/package.json ./
