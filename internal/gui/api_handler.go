@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	dataflowv1 "github.com/dataflow-operator/dataflow/api/v1"
+	"github.com/dataflow-operator/dataflow/pkg/k8snames"
 )
 
 // APIHandler handles API requests.
@@ -76,12 +77,18 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case filteredParts[0] == "dataflows":
 		h.handleDataFlows(w, r, filteredParts[1:])
+	case filteredParts[0] == "secrets":
+		h.handleSecrets(w, r, filteredParts[1:])
 	case filteredParts[0] == "logs":
 		h.handleLogs(w, r, filteredParts[1:])
 	case filteredParts[0] == "metrics":
 		h.handleMetrics(w, r, filteredParts[1:])
 	case filteredParts[0] == "status":
 		h.handleStatus(w, r, filteredParts[1:])
+	case filteredParts[0] == "runtime":
+		h.handleRuntime(w, r)
+	case filteredParts[0] == "prometheus":
+		h.handlePrometheus(w, r, filteredParts[1:])
 	case filteredParts[0] == "namespaces":
 		h.handleNamespaces(w, r)
 	case filteredParts[0] == "events":
@@ -252,7 +259,7 @@ func (h *APIHandler) handleLogs(w http.ResponseWriter, r *http.Request, parts []
 	}
 
 	if len(pods.Items) == 0 {
-		podName := fmt.Sprintf("dataflow-%s", name)
+		podName := k8snames.ProcessorDeployment(name)
 		pod, err := h.server.k8sClient.CoreV1().Pods(namespace).Get(r.Context(), podName, metav1.GetOptions{})
 		if err != nil {
 			pods, err = h.server.k8sClient.CoreV1().Pods(namespace).List(r.Context(), metav1.ListOptions{
@@ -413,12 +420,16 @@ func (h *APIHandler) handleStatus(w http.ResponseWriter, r *http.Request, parts 
 		return
 	}
 
+	persistence := checkpointPersistenceEnabled(df.Spec.CheckpointPersistence)
 	status := map[string]interface{}{
-		"phase":             df.Status.Phase,
-		"message":           df.Status.Message,
-		"processedCount":    df.Status.ProcessedCount,
-		"errorCount":        df.Status.ErrorCount,
-		"lastProcessedTime": df.Status.LastProcessedTime,
+		"phase":                  df.Status.Phase,
+		"message":                df.Status.Message,
+		"processedCount":         df.Status.ProcessedCount,
+		"errorCount":             df.Status.ErrorCount,
+		"lastProcessedTime":      df.Status.LastProcessedTime,
+		"conditions":             df.Status.Conditions,
+		"checkpointPersistence":  persistence,
+		"sourceType":             df.Spec.Source.Type,
 	}
 
 	json.NewEncoder(w).Encode(status)
@@ -482,4 +493,234 @@ func (h *APIHandler) handleNamespaces(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(namespaceNames)
+}
+
+func (h *APIHandler) handleSecrets(w http.ResponseWriter, r *http.Request, parts []string) {
+	namespace := r.URL.Query().Get("namespace")
+	if namespace == "" {
+		namespace = "default"
+	}
+
+	switch r.Method {
+	case "GET":
+		if len(parts) == 0 {
+			h.listSecrets(w, r, namespace)
+		} else {
+			h.getSecret(w, r, namespace, parts[0])
+		}
+	case "POST":
+		h.createSecret(w, r, namespace)
+	case "PUT":
+		if len(parts) > 0 {
+			h.updateSecret(w, r, namespace, parts[0])
+		} else {
+			http.Error(w, "Name required", http.StatusBadRequest)
+		}
+	case "DELETE":
+		if len(parts) > 0 {
+			h.deleteSecret(w, r, namespace, parts[0])
+		} else {
+			http.Error(w, "Name required", http.StatusBadRequest)
+		}
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// secretListItem is a safe representation of a Secret for listing (no sensitive values).
+type secretListItem struct {
+	Metadata *metav1.ObjectMeta `json:"metadata"`
+	Keys     []string          `json:"keys"`
+}
+
+func (h *APIHandler) listSecrets(w http.ResponseWriter, r *http.Request, namespace string) {
+	var list corev1.SecretList
+	if err := h.server.client.List(r.Context(), &list, client.InNamespace(namespace)); err != nil {
+		h.server.logger.Error(err, "Failed to list Secrets")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	items := make([]secretListItem, 0, len(list.Items))
+	for _, s := range list.Items {
+		keys := make([]string, 0, len(s.Data)+len(s.StringData))
+		for k := range s.Data {
+			keys = append(keys, k)
+		}
+		for k := range s.StringData {
+			if _, ok := s.Data[k]; !ok {
+				keys = append(keys, k)
+			}
+		}
+		sort.Strings(keys)
+		meta := s.ObjectMeta.DeepCopy()
+		items = append(items, secretListItem{Metadata: meta, Keys: keys})
+	}
+
+	json.NewEncoder(w).Encode(items)
+}
+
+// secretSafeView is a Secret representation with keys but masked values for sensitive fields.
+type secretSafeView struct {
+	Metadata   *metav1.ObjectMeta      `json:"metadata"`
+	StringData map[string]string       `json:"stringData,omitempty"`
+	Data       map[string]string       `json:"data,omitempty"`
+}
+
+var sensitiveKeys = map[string]bool{
+	"password": true, "token": true, "connectionstring": true,
+	"clientsecret": true, "username": true, "key": true,
+}
+
+func isSensitiveKey(k string) bool {
+	lower := strings.ToLower(k)
+	return sensitiveKeys[lower] || strings.Contains(lower, "password") ||
+		strings.Contains(lower, "token") || strings.Contains(lower, "secret")
+}
+
+func (h *APIHandler) getSecret(w http.ResponseWriter, r *http.Request, namespace, name string) {
+	var secret corev1.Secret
+	key := types.NamespacedName{Namespace: namespace, Name: name}
+
+	if err := h.server.client.Get(r.Context(), key, &secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+		h.server.logger.Error(err, "Failed to get Secret")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Build safe view: for sensitive keys mask values, for others return as-is
+	stringData := make(map[string]string)
+	for k, v := range secret.StringData {
+		if isSensitiveKey(k) {
+			stringData[k] = "****"
+		} else {
+			stringData[k] = v
+		}
+	}
+	for k, v := range secret.Data {
+		if _, ok := stringData[k]; ok {
+			continue
+		}
+		if isSensitiveKey(k) {
+			stringData[k] = "****"
+		} else {
+			stringData[k] = string(v)
+		}
+	}
+
+	if len(stringData) == 0 {
+		stringData = nil
+	}
+
+	view := secretSafeView{
+		Metadata:   secret.ObjectMeta.DeepCopy(),
+		StringData: stringData,
+	}
+	json.NewEncoder(w).Encode(view)
+}
+
+func (h *APIHandler) createSecret(w http.ResponseWriter, r *http.Request, namespace string) {
+	var secret corev1.Secret
+	if err := json.NewDecoder(r.Body).Decode(&secret); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	secret.Namespace = namespace
+	secret.APIVersion = "v1"
+	secret.Kind = "Secret"
+	if secret.Type == "" {
+		secret.Type = corev1.SecretTypeOpaque
+	}
+
+	if err := h.server.client.Create(r.Context(), &secret); err != nil {
+		h.server.logger.Error(err, "Failed to create Secret")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(secret)
+}
+
+func (h *APIHandler) updateSecret(w http.ResponseWriter, r *http.Request, namespace, name string) {
+	var secret corev1.Secret
+	key := types.NamespacedName{Namespace: namespace, Name: name}
+
+	if err := h.server.client.Get(r.Context(), key, &secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+		h.server.logger.Error(err, "Failed to get Secret")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var updates corev1.Secret
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Merge updates: do not overwrite sensitive fields with masked placeholder "****"
+	if secret.StringData == nil {
+		secret.StringData = make(map[string]string)
+	}
+	for k, v := range updates.StringData {
+		if v == "****" && isSensitiveKey(k) {
+			if existing, ok := secret.StringData[k]; ok && existing != "" {
+				continue
+			}
+			if existing, ok := secret.Data[k]; ok && len(existing) > 0 {
+				secret.StringData[k] = string(existing)
+				continue
+			}
+		}
+		secret.StringData[k] = v
+	}
+	if secret.Data == nil {
+		secret.Data = make(map[string][]byte)
+	}
+	for k, v := range updates.Data {
+		secret.Data[k] = v
+	}
+	if updates.Type != "" {
+		secret.Type = updates.Type
+	}
+
+	if err := h.server.client.Update(r.Context(), &secret); err != nil {
+		h.server.logger.Error(err, "Failed to update Secret")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(secret)
+}
+
+func (h *APIHandler) deleteSecret(w http.ResponseWriter, r *http.Request, namespace, name string) {
+	var secret corev1.Secret
+	key := types.NamespacedName{Namespace: namespace, Name: name}
+
+	if err := h.server.client.Get(r.Context(), key, &secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+		h.server.logger.Error(err, "Failed to get Secret")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.server.client.Delete(r.Context(), &secret); err != nil {
+		h.server.logger.Error(err, "Failed to delete Secret")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

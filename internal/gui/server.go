@@ -85,12 +85,14 @@ func (h staticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Server represents the web server for the GUI.
 type Server struct {
-	bindAddr          string
-	httpServer        *http.Server
-	client            client.Client
-	k8sClient         *kubernetes.Clientset
-	logger            logr.Logger
-	operatorMetricsURL string
+	bindAddr              string
+	httpServer            *http.Server
+	client                client.Client
+	k8sClient             kubernetes.Interface
+	logger                logr.Logger
+	operatorMetricsURL    string
+	prometheusURL         string
+	prometheusBearerToken string
 }
 
 // NewServer creates a new GUI server.
@@ -131,11 +133,13 @@ func NewServer(bindAddr, kubeconfig string) (*Server, error) {
 	}
 
 	server := &Server{
-		bindAddr:          bindAddr,
-		client:            k8sClient,
-		k8sClient:         clientset,
-		logger:            logger,
-		operatorMetricsURL: os.Getenv("OPERATOR_METRICS_URL"),
+		bindAddr:               bindAddr,
+		client:                 k8sClient,
+		k8sClient:              clientset,
+		logger:                 logger,
+		operatorMetricsURL:     os.Getenv("OPERATOR_METRICS_URL"),
+		prometheusURL:          os.Getenv("PROMETHEUS_URL"),
+		prometheusBearerToken:  os.Getenv("PROMETHEUS_BEARER_TOKEN"),
 	}
 
 	mux := http.NewServeMux()

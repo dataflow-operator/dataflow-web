@@ -15,6 +15,12 @@ const routes = [
     meta: { titleKey: 'nav.manifests' },
   },
   {
+    path: '/connections',
+    name: 'connections',
+    component: () => import('../views/ConnectionsView.vue'),
+    meta: { titleKey: 'nav.connections' },
+  },
+  {
     path: '/logs',
     name: 'logs',
     component: () => import('../views/LogsView.vue'),

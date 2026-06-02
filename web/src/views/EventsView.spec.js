@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { i18n } from '../i18n'
+import { i18n, setLocale } from '../i18n'
 import EventsView from './EventsView.vue'
 
 vi.mock('../api/client', () => ({
@@ -11,6 +11,7 @@ vi.mock('../api/client', () => ({
 
 describe('EventsView', () => {
   beforeEach(async () => {
+    setLocale('ru')
     const { getNamespaces, listDataFlows, getEvents } = await import('../api/client')
     getNamespaces.mockResolvedValue(['default', 'kube-system'])
     listDataFlows.mockResolvedValue([
@@ -35,7 +36,7 @@ describe('EventsView', () => {
     })
     await flushPromises()
 
-    expect(wrapper.find('h2').text()).toContain('Events')
+    expect(wrapper.find('h2').text()).toContain('События')
     const rows = wrapper.findAll('tbody tr')
     expect(rows.length).toBe(1)
     expect(rows[0].text()).toContain('ConfigMapCreated')

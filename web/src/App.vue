@@ -6,6 +6,7 @@
         <nav class="app-nav" :aria-label="t('app.navAria')">
           <router-link to="/">{{ t('nav.dashboard') }}</router-link>
           <router-link to="/manifests">{{ t('nav.manifests') }}</router-link>
+          <router-link to="/connections">{{ t('nav.connections') }}</router-link>
           <router-link to="/logs">{{ t('nav.logs') }}</router-link>
           <router-link to="/metrics">{{ t('nav.metrics') }}</router-link>
           <router-link to="/events">{{ t('nav.events') }}</router-link>

@@ -3,7 +3,12 @@
     <div class="card">
       <div class="card-header">
         <h2>{{ t('manifests.title') }}</h2>
-        <button class="btn btn-primary" @click="openCreate">{{ t('manifests.createNew') }}</button>
+        <div class="card-header-actions">
+          <button class="btn btn-secondary" @click="openCreateInConstructor">
+            {{ t('manifests.createInConstructor') }}
+          </button>
+          <button class="btn btn-primary" @click="openCreate">{{ t('manifests.createNew') }}</button>
+        </div>
       </div>
       <NamespaceSelect v-model="namespace" @update:model-value="loadDataFlows" />
       <LoadingSpinner v-if="loading" :message="t('manifests.loading')" />
@@ -49,6 +54,13 @@
                   <button
                     type="button"
                     class="btn btn-secondary btn-sm"
+                    @click="openEditInConstructor(df.metadata.namespace, df.metadata.name)"
+                  >
+                    {{ t('manifests.openInConstructor') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
                     @click="openEdit(df.metadata.namespace, df.metadata.name)"
                   >
                     {{ t('manifests.viewEdit') }}
@@ -86,6 +98,24 @@
       @cancel="confirm.open = false"
       @confirm="doDelete"
     />
+
+    <div v-if="constructorModal.open" class="constructor-modal-overlay" @click.self="constructorModal.open = false">
+      <div class="constructor-modal">
+        <div class="constructor-modal-header">
+          <h2>{{ constructorModal.title }}</h2>
+          <button type="button" class="modal-close" @click="constructorModal.open = false">&times;</button>
+        </div>
+        <div class="constructor-modal-body">
+          <FlowCanvas
+            :initial-manifest="constructorModal.manifest"
+            :connections="connections"
+            :namespace="constructorModal.namespace"
+            :mode="constructorModal.mode"
+            @save="onConstructorSave"
+          />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -97,6 +127,7 @@ import NamespaceSelect from '../components/NamespaceSelect.vue'
 import YamlEditorModal from '../components/YamlEditorModal.vue'
 import ConfirmModal from '../components/ConfirmModal.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
+import FlowCanvas from '../components/FlowCanvas.vue'
 import { useToast } from '../composables/useToast'
 import {
   listDataFlows,
@@ -104,7 +135,9 @@ import {
   createDataFlow,
   updateDataFlow,
   deleteDataFlow,
+  listSecrets,
 } from '../api/client'
+import { sanitizeManifestForDisplay, mergeManifestForUpdate } from '../utils/manifest'
 
 const { t } = useI18n()
 const { success, error: showError } = useToast()
@@ -123,6 +156,7 @@ const yamlModal = ref({
   mode: 'edit',
   editingNamespace: '',
   editingName: '',
+  originalManifest: null,
 })
 
 const confirm = ref({
@@ -131,6 +165,18 @@ const confirm = ref({
   name: '',
   message: '',
 })
+
+const constructorModal = ref({
+  open: false,
+  title: '',
+  manifest: null,
+  namespace: 'default',
+  mode: 'create',
+  editingNamespace: '',
+  editingName: '',
+})
+
+const connections = ref([])
 
 const filteredFlows = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -175,13 +221,76 @@ async function openEdit(ns, name) {
     yamlModal.value = {
       open: true,
       title: t('manifests.editTitle', { name, ns }),
-      value: df,
+      value: sanitizeManifestForDisplay(df),
+      mode: 'edit',
+      editingNamespace: ns,
+      editingName: name,
+      originalManifest: df,
+    }
+  } catch (e) {
+    showError(e.message)
+  }
+}
+
+async function openCreateInConstructor() {
+  const ns = namespace.value || 'default'
+  try {
+    connections.value = await listSecrets(ns)
+  } catch {
+    connections.value = []
+  }
+  constructorModal.value = {
+    open: true,
+    title: t('manifests.createTitle'),
+    manifest: null,
+    namespace: ns,
+    mode: 'create',
+    editingNamespace: ns,
+    editingName: '',
+  }
+}
+
+async function openEditInConstructor(ns, name) {
+  try {
+    const [df, conns] = await Promise.all([getDataFlow(ns, name), listSecrets(ns)])
+    connections.value = conns
+    constructorModal.value = {
+      open: true,
+      title: t('manifests.editTitle', { name, ns }),
+      manifest: df,
+      namespace: ns,
       mode: 'edit',
       editingNamespace: ns,
       editingName: name,
     }
   } catch (e) {
     showError(e.message)
+  }
+}
+
+function onConstructorSave(manifest, err) {
+  if (err) {
+    showError(err?.message || 'Invalid flow')
+    return
+  }
+  const { editingNamespace, editingName, mode } = constructorModal.value
+  if (mode === 'edit') {
+    updateDataFlow(editingNamespace, editingName, manifest)
+      .then(() => {
+        constructorModal.value.open = false
+        loadDataFlows()
+        success(t('manifests.updated'))
+      })
+      .catch((e) => showError(e.message))
+  } else {
+    const ns = manifest.metadata?.namespace || namespace.value || 'default'
+    createDataFlow(ns, manifest)
+      .then(() => {
+        constructorModal.value.open = false
+        loadDataFlows()
+        success(t('manifests.created'))
+      })
+      .catch((e) => showError(e.message))
   }
 }
 
@@ -195,8 +304,8 @@ function openCreate() {
       kind: 'DataFlow',
       metadata: { name: '', namespace: ns },
       spec: {
-        source: { type: 'kafka', kafka: { brokers: [], topic: '' } },
-        sink: { type: 'postgresql', postgresql: { connectionString: '', table: '' } },
+        source: { type: 'kafka', config: {} },
+        sink: { type: 'postgresql', config: {} },
         transformations: [],
       },
     },
@@ -211,8 +320,9 @@ function onSave(parsed, err) {
     showError(err.message)
     return
   }
-  const { editingNamespace, editingName } = yamlModal.value
-  updateDataFlow(editingNamespace, editingName, parsed)
+  const { editingNamespace, editingName, originalManifest } = yamlModal.value
+  const toUpdate = originalManifest ? mergeManifestForUpdate(parsed, originalManifest) : parsed
+  updateDataFlow(editingNamespace, editingName, toUpdate)
     .then(() => {
       yamlModal.value.open = false
       loadDataFlows()
@@ -291,5 +401,65 @@ function doDelete() {
 .empty-hint {
   margin-top: 0.5rem;
   font-size: 0.9rem;
+}
+
+.card-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.constructor-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.constructor-modal {
+  background: var(--bg-card);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 1100px;
+  max-height: 95vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.constructor-modal-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: white;
+  border-radius: 8px 8px 0 0;
+}
+
+.constructor-modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.constructor-modal-header .modal-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.75rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.constructor-modal-body {
+  padding: 1rem;
+  overflow: auto;
+  flex: 1;
 }
 </style>

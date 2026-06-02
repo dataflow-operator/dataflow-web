@@ -91,8 +91,67 @@ export async function getMetrics(namespace, name) {
   )
 }
 
+export async function getRuntime(namespace, name) {
+  return request(
+    `/runtime?namespace=${encodeURIComponent(namespace)}&name=${encodeURIComponent(name)}`
+  )
+}
+
+export async function getPrometheusRange(namespace, name, panel, { start, end, step } = {}) {
+  const params = new URLSearchParams({
+    namespace,
+    name,
+    panel,
+  })
+  if (start != null) params.set('start', String(start))
+  if (end != null) params.set('end', String(end))
+  if (step != null) params.set('step', String(step))
+  return request(`/prometheus/range?${params.toString()}`)
+}
+
+export async function getPrometheusInstant(namespace, name, panel) {
+  const params = new URLSearchParams({ namespace, name, panel })
+  return request(`/prometheus/instant?${params.toString()}`)
+}
+
 export async function getEvents(namespace, name = null) {
   const params = new URLSearchParams({ namespace })
   if (name) params.set('name', name)
   return request(`/events?${params.toString()}`)
+}
+
+export async function listSecrets(namespace = 'default') {
+  return request(`/secrets?namespace=${encodeURIComponent(namespace)}`)
+}
+
+export async function getSecret(namespace, name) {
+  return request(
+    `/secrets/${encodeURIComponent(name)}?namespace=${encodeURIComponent(namespace)}`
+  )
+}
+
+export async function createSecret(namespace, body) {
+  return request(`/secrets?namespace=${encodeURIComponent(namespace)}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateSecret(namespace, name, body) {
+  return request(
+    `/secrets/${encodeURIComponent(name)}?namespace=${encodeURIComponent(namespace)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }
+  )
+}
+
+export async function deleteSecret(namespace, name) {
+  const url = `${API_BASE}/secrets/${encodeURIComponent(name)}?namespace=${encodeURIComponent(namespace)}`
+  const res = await fetch(url, { method: 'DELETE' })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `HTTP ${res.status}`)
+  }
 }

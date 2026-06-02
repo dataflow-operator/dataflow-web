@@ -8,7 +8,15 @@ import {
   deleteDataFlow,
   getLogs,
   getStatus,
+  getRuntime,
+  getPrometheusRange,
+  getPrometheusInstant,
   getEvents,
+  listSecrets,
+  getSecret,
+  createSecret,
+  updateSecret,
+  deleteSecret,
 } from './client'
 
 describe('API client', () => {
@@ -94,6 +102,31 @@ describe('API client', () => {
     expect(result.processedCount).toBe(10)
   })
 
+  it('getRuntime calls /api/runtime', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ checkpointConfigMap: 'df-x-checkpoint' }) })
+    const result = await getRuntime('default', 'df1')
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/runtime?'), expect.any(Object))
+    expect(result.checkpointConfigMap).toBe('df-x-checkpoint')
+  })
+
+  it('getPrometheusRange calls /api/prometheus/range', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ mode: 'instant', series: [] }) })
+    await getPrometheusRange('default', 'df1', 'throughput', { start: 1, end: 2, step: 15 })
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/prometheus\/range\?.*panel=throughput/),
+      expect.any(Object)
+    )
+  })
+
+  it('getPrometheusInstant calls /api/prometheus/instant', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ mode: 'instant', series: [] }) })
+    await getPrometheusInstant('default', 'df1', 'queue_size')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/prometheus\/instant\?.*panel=queue_size/),
+      expect.any(Object)
+    )
+  })
+
   it('getEvents returns all events when name is null', async () => {
     const events = [{ type: 'Normal', reason: 'ConfigMapCreated', message: 'Created ConfigMap' }]
     fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(events) })
@@ -117,5 +150,59 @@ describe('API client', () => {
   it('throws on non-ok response', async () => {
     fetch.mockResolvedValueOnce({ ok: false, text: () => Promise.resolve('Not found') })
     await expect(getNamespaces()).rejects.toThrow()
+  })
+
+  it('listSecrets adds namespace query', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+    await listSecrets('myns')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\?namespace=myns/),
+      expect.any(Object)
+    )
+  })
+
+  it('getSecret builds path with name and namespace', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ metadata: { name: 'kafka-creds' }, stringData: {} }),
+    })
+    const result = await getSecret('default', 'kafka-creds')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/secrets/kafka-creds'),
+      expect.any(Object)
+    )
+    expect(result.metadata.name).toBe('kafka-creds')
+  })
+
+  it('createSecret sends POST with body', async () => {
+    const body = { metadata: { name: 'new-secret' }, type: 'Opaque', stringData: { key: 'val' } }
+    fetch.mockResolvedValueOnce({ ok: true, status: 201, json: () => Promise.resolve(body) })
+    await createSecret('default', body)
+    expect(fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    )
+  })
+
+  it('updateSecret sends PUT with body', async () => {
+    const body = { stringData: { key: 'updated' } }
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(body) })
+    await updateSecret('default', 'my-secret', body)
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/secrets/my-secret'),
+      expect.objectContaining({ method: 'PUT' })
+    )
+  })
+
+  it('deleteSecret sends DELETE', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, status: 204 })
+    await deleteSecret('default', 'my-secret')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/secrets/my-secret'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
   })
 })
