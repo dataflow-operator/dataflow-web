@@ -120,6 +120,12 @@ const CONNECTION_FIELDS = {
     { key: 'namespace', label: 'Namespace', placeholder: 'default', sensitive: false },
     { key: 'table', label: 'Table', placeholder: 'table_name', sensitive: false },
   ],
+  iceberg: [
+    { key: 'catalogURI', label: 'Catalog URI', placeholder: 'https://catalog:8181', sensitive: false },
+    { key: 'token', label: 'Bearer Token', placeholder: '', sensitive: true },
+    { key: 'namespace', label: 'Namespace', placeholder: 'default', sensitive: false },
+    { key: 'table', label: 'Table', placeholder: 'table_name', sensitive: false },
+  ],
 }
 
 const props = defineProps({
@@ -148,6 +154,7 @@ const connectionTypes = computed(() => ({
   trino: t('connections.connectionTypes.trino'),
   clickhouse: t('connections.connectionTypes.clickhouse'),
   nessie: t('connections.connectionTypes.nessie'),
+  iceberg: t('connections.connectionTypes.iceberg'),
 }))
 
 const currentFields = computed(() => {

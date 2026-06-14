@@ -149,8 +149,49 @@ describe('useFlowManifest', () => {
   it('CONNECTOR_TYPES and TRANSFORMATION_TYPES are defined', () => {
     expect(CONNECTOR_TYPES).toContain('kafka')
     expect(CONNECTOR_TYPES).toContain('postgresql')
+    expect(CONNECTOR_TYPES).toContain('iceberg')
     expect(TRANSFORMATION_TYPES).toContain('timestamp')
     expect(TRANSFORMATION_TYPES).toContain('flatten')
+  })
+
+  it('manifestToGraph round-trips iceberg source and sink', () => {
+    const manifest = {
+      metadata: { name: 'iceberg-flow', namespace: 'default' },
+      spec: {
+        source: {
+          type: 'iceberg',
+          config: {
+            catalogURI: 'https://catalog:8181',
+            namespace: 'analytics',
+            table: 'events',
+            pollInterval: 10,
+            incrementalBySnapshot: true,
+          },
+        },
+        sink: {
+          type: 'iceberg',
+          config: {
+            catalogURI: 'https://catalog:8181',
+            namespace: 'analytics',
+            table: 'events_out',
+            upsertMode: true,
+            conflictKey: 'id',
+          },
+        },
+        transformations: [],
+      },
+    }
+    const { nodes, edges } = manifestToGraph(manifest)
+    expect(nodes[0].data.connectorType).toBe('iceberg')
+    expect(nodes[0].data.config.catalogURI).toBe('https://catalog:8181')
+    expect(nodes[1].data.connectorType).toBe('iceberg')
+    expect(nodes[1].data.config.upsertMode).toBe(true)
+
+    const result = graphToManifest(nodes, edges, manifest)
+    expect(result.spec.source.type).toBe('iceberg')
+    expect(result.spec.source.config.incrementalBySnapshot).toBe(true)
+    expect(result.spec.sink.config.upsertMode).toBe(true)
+    expect(result.spec.sink.config.conflictKey).toBe('id')
   })
 
   it('graphToManifest uses baseManifest metadata', () => {
@@ -211,5 +252,110 @@ describe('useFlowManifest', () => {
     expect(result.spec.checkpointSyncOnAck).toBe(true)
     expect(result.spec.ackGranularity).toBe('message')
     expect(result.spec.transformations).toHaveLength(1)
+  })
+
+  it('graphToManifest round-trips router transformation', () => {
+    const manifest = {
+      metadata: { name: 'router-flow', namespace: 'default' },
+      spec: {
+        source: { type: 'postgresql', config: { table: 'events' } },
+        sink: { type: 'kafka', config: { topic: 'default' } },
+        transformations: [
+          {
+            type: 'router',
+            config: {
+              routes: [
+                {
+                  condition: "$.type == 'order'",
+                  sink: {
+                    type: 'kafka',
+                    config: { brokers: ['localhost:9092'], topic: 'orders' },
+                  },
+                },
+                {
+                  condition: "$.type == 'user'",
+                  sink: {
+                    type: 'kafka',
+                    config: { brokers: ['localhost:9092'], topic: 'users' },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    }
+    const { nodes, edges } = manifestToGraph(manifest)
+    const routerNode = nodes.find((n) => n.data.transformationType === 'router')
+    expect(routerNode).toBeDefined()
+    expect(routerNode.data.config.routes).toHaveLength(2)
+
+    const result = graphToManifest(nodes, edges, manifest)
+    expect(result.spec.transformations).toHaveLength(1)
+    expect(result.spec.transformations[0].type).toBe('router')
+    expect(result.spec.transformations[0].config.routes[0].condition).toBe("$.type == 'order'")
+    expect(result.spec.transformations[0].config.routes[0].sink.config.topic).toBe('orders')
+  })
+
+  it('parity regression: constructor save preserves iceberg, errors, fault-tolerance and upsertMode', () => {
+    const manifest = {
+      metadata: { name: 'parity-flow', namespace: 'prod', resourceVersion: '12345' },
+      spec: {
+        source: {
+          type: 'iceberg',
+          config: {
+            catalogURI: 'https://catalog:8181',
+            namespace: 'analytics',
+            table: 'events_in',
+            pollInterval: 15,
+            incrementalBySnapshot: true,
+          },
+        },
+        sink: {
+          type: 'iceberg',
+          config: {
+            catalogURI: 'https://catalog:8181',
+            namespace: 'analytics',
+            table: 'events_out',
+            upsertMode: true,
+            conflictKey: 'event_id',
+          },
+        },
+        transformations: [{ type: 'timestamp', config: { fieldName: 'processed_at' } }],
+        checkpointPersistence: true,
+        checkpointSyncOnAck: true,
+        checkpointSaveInterval: '30s',
+        strictIdempotency: true,
+        ackGranularity: 'message',
+        replicas: 2,
+        channelBufferSize: 1000,
+        errors: {
+          type: 'kafka',
+          config: { brokers: ['kafka:9092'], topic: 'dlq' },
+          ackPolicy: 'afterWrite',
+        },
+      },
+    }
+
+    const { nodes, edges } = manifestToGraph(manifest)
+    nodes.find((n) => n.id === 'source').data.config.pollInterval = 20
+
+    const result = graphToManifest(nodes, edges, manifest)
+
+    expect(result.spec.source.type).toBe('iceberg')
+    expect(result.spec.source.config.pollInterval).toBe(20)
+    expect(result.spec.source.config.incrementalBySnapshot).toBe(true)
+    expect(result.spec.sink.config.upsertMode).toBe(true)
+    expect(result.spec.sink.config.conflictKey).toBe('event_id')
+    expect(result.spec.checkpointPersistence).toBe(true)
+    expect(result.spec.checkpointSyncOnAck).toBe(true)
+    expect(result.spec.checkpointSaveInterval).toBe('30s')
+    expect(result.spec.strictIdempotency).toBe(true)
+    expect(result.spec.ackGranularity).toBe('message')
+    expect(result.spec.replicas).toBe(2)
+    expect(result.spec.channelBufferSize).toBe(1000)
+    expect(result.spec.errors).toEqual(manifest.spec.errors)
+    expect(result.metadata.name).toBe('parity-flow')
+    expect(result.metadata.namespace).toBe('prod')
   })
 })

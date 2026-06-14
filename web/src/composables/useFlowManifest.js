@@ -6,7 +6,7 @@ const SOURCE_NODE_ID = 'source'
 const SINK_NODE_ID = 'sink'
 const TRANSFORMATION_PREFIX = 't-'
 
-export const CONNECTOR_TYPES = ['kafka', 'postgresql', 'trino', 'clickhouse', 'nessie']
+export const CONNECTOR_TYPES = ['kafka', 'postgresql', 'trino', 'clickhouse', 'nessie', 'iceberg']
 export const TRANSFORMATION_TYPES = [
   'timestamp',
   'flatten',

@@ -99,16 +99,60 @@
           <p v-else class="field-hint">{{ t('flow.pipelineSettingsReplicasHint') }}</p>
         </div>
       </section>
+      <section class="settings-section">
+        <h4 class="section-title">{{ t('flow.pipelineSettingsErrorSink') }}</h4>
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input v-model="local.errorSink.enabled" type="checkbox" />
+            {{ t('flow.pipelineSettingsErrorSinkEnabled') }}
+          </label>
+          <p class="field-hint">{{ t('flow.pipelineSettingsErrorSinkEnabledHint') }}</p>
+        </div>
+        <template v-if="local.errorSink.enabled">
+          <div class="form-group">
+            <label for="error-sink-type">{{ t('flow.connectorType') }}</label>
+            <select
+              id="error-sink-type"
+              v-model="local.errorSink.connectorType"
+              @change="onErrorSinkTypeChange"
+            >
+              <option v-for="ct in connectorTypes" :key="ct" :value="ct">
+                {{ ct }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="error-sink-ack-policy">{{ t('flow.pipelineSettingsErrorSinkAckPolicy') }}</label>
+            <select id="error-sink-ack-policy" v-model="local.errorSink.ackPolicy">
+              <option v-for="policy in errorAckPolicies" :key="policy" :value="policy">
+                {{ t(`flow.pipelineSettingsErrorSinkAckPolicy_${policy}`) }}
+              </option>
+            </select>
+            <p class="field-hint">{{ t('flow.pipelineSettingsErrorSinkAckPolicyHint') }}</p>
+          </div>
+          <ConnectorConfigForm
+            v-model="errorSinkStructuredConfig"
+            :connector-type="local.errorSink.connectorType"
+            role="sink"
+            :source-connector-type="sourceType"
+          />
+        </template>
+      </section>
     </div>
   </aside>
 </template>
 
 <script setup>
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import ConnectorConfigForm from './config-forms/ConnectorConfigForm.vue'
+import { configToForm, formToConfig } from './config-forms/useConfigForm'
+import { CONNECTOR_TYPES } from '../composables/useFlowManifest'
 import {
   ACK_GRANULARITY_OPTIONS,
+  ERROR_ACK_POLICIES,
   createDefaultPipelineSettings,
+  createDefaultErrorSinkSettings,
   isReplicasSupported,
   isValidDuration,
   formatDurationForInput,
@@ -124,8 +168,11 @@ const emit = defineEmits(['update:modelValue', 'close'])
 const { t } = useI18n()
 
 const ackGranularityOptions = ACK_GRANULARITY_OPTIONS
+const errorAckPolicies = ERROR_ACK_POLICIES
+const connectorTypes = CONNECTOR_TYPES
 
 const local = reactive(createDefaultPipelineSettings())
+const errorSinkStructuredConfig = ref({})
 let syncingFromProps = false
 
 function syncFromProps(value) {
@@ -135,7 +182,16 @@ function syncFromProps(value) {
     ...createDefaultPipelineSettings(),
     ...next,
     checkpointSaveInterval: formatDurationForInput(next.checkpointSaveInterval),
+    errorSink: {
+      ...createDefaultErrorSinkSettings(),
+      ...(next.errorSink || {}),
+    },
   })
+  errorSinkStructuredConfig.value = configToForm(
+    local.errorSink.config || {},
+    local.errorSink.connectorType,
+    'sink'
+  )
   syncingFromProps = false
 }
 
@@ -149,7 +205,43 @@ watch(
   local,
   () => {
     if (syncingFromProps) return
-    emit('update:modelValue', { ...local })
+    emit('update:modelValue', {
+      ...local,
+      errorSink: { ...local.errorSink },
+    })
+  },
+  { deep: true }
+)
+
+function parseAdvancedConfig(advancedJson) {
+  if (!advancedJson?.trim()) return {}
+  try {
+    return JSON.parse(advancedJson) || {}
+  } catch {
+    return {}
+  }
+}
+
+function onErrorSinkTypeChange() {
+  errorSinkStructuredConfig.value = configToForm(
+    {},
+    local.errorSink.connectorType,
+    'sink'
+  )
+  local.errorSink.config = {}
+}
+
+watch(
+  errorSinkStructuredConfig,
+  (form) => {
+    if (syncingFromProps || !local.errorSink.enabled) return
+    const advanced = parseAdvancedConfig(form?.advancedJson)
+    local.errorSink.config = formToConfig(
+      form,
+      local.errorSink.connectorType,
+      'sink',
+      advanced
+    )
   },
   { deep: true }
 )

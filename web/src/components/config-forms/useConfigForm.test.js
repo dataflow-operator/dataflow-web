@@ -151,6 +151,105 @@ describe('useConfigForm', () => {
       expect(result).toEqual(config)
     })
 
+    it('Iceberg source round-trip', () => {
+      const config = {
+        catalogURI: 'https://catalog:8181',
+        namespace: 'analytics',
+        table: 'events',
+        pollInterval: 30,
+        incrementalBySnapshot: true,
+        startSnapshotID: '12345',
+        authenticationType: 'BEARER',
+        bearerToken: 'secret',
+      }
+      const form = configToForm(config, 'iceberg', 'source')
+      expect(form.catalogURI).toBe(config.catalogURI)
+      expect(form.namespace).toBe(config.namespace)
+      expect(form.table).toBe(config.table)
+      expect(form.pollInterval).toBe(30)
+      expect(form.incrementalBySnapshot).toBe(true)
+      expect(form.startSnapshotID).toBe('12345')
+      expect(form.authenticationType).toBe('BEARER')
+      expect(form.bearerToken).toBe('secret')
+
+      const result = formToConfig(form, 'iceberg', 'source', {})
+      expect(result.catalogURI).toBe(config.catalogURI)
+      expect(result.pollInterval).toBe(30)
+      expect(result.incrementalBySnapshot).toBe(true)
+      expect(result.startSnapshotID).toBe('12345')
+      expect(result.authenticationType).toBe('BEARER')
+      expect(result.bearerToken).toBe('secret')
+    })
+
+    it('Iceberg sink round-trip with upsertMode', () => {
+      const config = {
+        catalogURI: 'https://catalog:8181',
+        namespace: 'analytics',
+        table: 'events',
+        autoCreateTable: true,
+        batchSize: 500,
+        upsertMode: true,
+        conflictKey: 'id',
+        basicAuth: { username: 'user', password: 'pass' },
+      }
+      const form = configToForm(config, 'iceberg', 'sink')
+      expect(form.upsertMode).toBe(true)
+      expect(form.conflictKey).toBe('id')
+      expect(form.basicAuthUsername).toBe('user')
+      expect(form.basicAuthPassword).toBe('pass')
+
+      const result = formToConfig(form, 'iceberg', 'sink', {})
+      expect(result.upsertMode).toBe(true)
+      expect(result.conflictKey).toBe('id')
+      expect(result.basicAuth).toEqual({ username: 'user', password: 'pass' })
+      expect(result.autoCreateTable).toBe(true)
+      expect(result.batchSize).toBe(500)
+    })
+
+    it('PostgreSQL sink upsertMode round-trip', () => {
+      const config = {
+        connectionString: 'postgres://localhost/db',
+        table: 'output',
+        upsertMode: true,
+        conflictKey: 'id',
+      }
+      const form = configToForm(config, 'postgresql', 'sink')
+      expect(form.upsertMode).toBe(true)
+      expect(form.conflictKey).toBe('id')
+
+      const result = formToConfig(form, 'postgresql', 'sink', {})
+      expect(result.upsertMode).toBe(true)
+      expect(result.conflictKey).toBe('id')
+    })
+
+    it('Trino sink upsertMode round-trip', () => {
+      const config = {
+        serverURL: 'http://trino:8080',
+        catalog: 'iceberg',
+        schema: 'default',
+        table: 'events',
+        upsertMode: true,
+        conflictKey: 'event_id',
+      }
+      const form = configToForm(config, 'trino', 'sink')
+      const result = formToConfig(form, 'trino', 'sink', {})
+      expect(result.upsertMode).toBe(true)
+      expect(result.conflictKey).toBe('event_id')
+    })
+
+    it('ClickHouse sink upsertMode round-trip', () => {
+      const config = {
+        connectionString: 'clickhouse://localhost/default',
+        table: 'output',
+        upsertMode: true,
+        conflictKey: 'id',
+      }
+      const form = configToForm(config, 'clickhouse', 'sink')
+      const result = formToConfig(form, 'clickhouse', 'sink', {})
+      expect(result.upsertMode).toBe(true)
+      expect(result.conflictKey).toBe('id')
+    })
+
     it('config with SecretRefs returns useAdvanced', () => {
       const config = {
         brokersSecretRef: { name: 'kafka-secret', key: 'brokers' },
@@ -251,15 +350,58 @@ describe('useConfigForm', () => {
       expect(result.keepLength).toBe(true)
     })
 
-    it('router returns useAdvanced', () => {
+    it('router round-trip with structured routes', () => {
       const config = {
         routes: [
-          { condition: '$.level', sink: { type: 'kafka', config: {} } },
+          {
+            condition: "$.type == 'order'",
+            sink: {
+              type: 'kafka',
+              config: { brokers: ['localhost:9092'], topic: 'orders' },
+            },
+          },
+          {
+            condition: "$.type == 'user'",
+            sink: {
+              type: 'kafka',
+              config: { brokers: ['localhost:9092'], topic: 'users' },
+            },
+          },
+        ],
+      }
+      const form = transformationConfigToForm(config, 'router')
+      expect(form.useAdvanced).toBeUndefined()
+      expect(form.routes).toHaveLength(2)
+      expect(form.routes[0].condition).toBe("$.type == 'order'")
+      expect(form.routes[0].sinkType).toBe('kafka')
+      expect(JSON.parse(form.routes[0].sinkConfigJson).topic).toBe('orders')
+
+      const result = transformationFormToConfig(form, 'router', {})
+      expect(result.routes).toHaveLength(2)
+      expect(result.routes[0].condition).toBe("$.type == 'order'")
+      expect(result.routes[0].sink.type).toBe('kafka')
+      expect(result.routes[0].sink.config.topic).toBe('orders')
+      expect(result.routes[1].sink.config.topic).toBe('users')
+    })
+
+    it('router with SecretRefs in nested sink uses advanced mode', () => {
+      const config = {
+        routes: [
+          {
+            condition: 'true',
+            sink: {
+              type: 'kafka',
+              config: {
+                brokersSecretRef: { name: 'kafka-secret', key: 'brokers' },
+                topic: 'errors',
+              },
+            },
+          },
         ],
       }
       const form = transformationConfigToForm(config, 'router')
       expect(form.useAdvanced).toBe(true)
-      expect(form.advancedJson).toContain('routes')
+      expect(form.advancedJson).toContain('brokersSecretRef')
     })
 
     it('snakeCase/camelCase round-trip', () => {

@@ -44,6 +44,7 @@
                 v-model="form.structuredConfig"
                 :connector-type="form.connectorType"
                 :role="nodeType"
+                :source-connector-type="sourceConnectorType"
               />
             </template>
             <div v-else class="form-group">
@@ -111,6 +112,7 @@ const props = defineProps({
   nodeType: { type: String, default: '' },
   connections: { type: Array, default: () => [] },
   namespace: { type: String, default: 'default' },
+  sourceConnectorType: { type: String, default: 'kafka' },
 })
 
 const emit = defineEmits(['close', 'save'])

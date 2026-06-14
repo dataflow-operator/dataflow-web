@@ -95,6 +95,7 @@
       :node-type="configPanel.nodeType"
       :connections="connections"
       :namespace="namespace"
+      :source-connector-type="sourceConnectorType"
       @close="configPanel.open = false"
       @save="onConfigSave"
     />

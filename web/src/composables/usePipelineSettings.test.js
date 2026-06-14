@@ -3,6 +3,8 @@ import {
   createDefaultPipelineSettings,
   specToPipelineSettings,
   applyPipelineSettingsToSpec,
+  specToErrorSinkSettings,
+  errorSinkSettingsToSpec,
   formatDurationForInput,
   isValidDuration,
   isReplicasSupported,
@@ -22,6 +24,8 @@ describe('usePipelineSettings', () => {
     expect(defaults.ackGranularity).toBe(ACK_GRANULARITY_BATCH)
     expect(defaults.replicas).toBe(1)
     expect(defaults.channelBufferSize).toBe('')
+    expect(defaults.errorSink.enabled).toBe(false)
+    expect(defaults.errorSink.ackPolicy).toBe('afterWrite')
   })
 
   it('specToPipelineSettings reads spec fields', () => {
@@ -146,5 +150,87 @@ describe('usePipelineSettings', () => {
     expect(result.spec.checkpointSyncOnAck).toBe(true)
     expect(result.spec.ackGranularity).toBe(ACK_GRANULARITY_MESSAGE)
     expect(result.spec.channelBufferSize).toBe(500)
+  })
+
+  it('specToErrorSinkSettings and errorSinkSettingsToSpec round-trip', () => {
+    const errors = {
+      type: 'kafka',
+      config: { topic: 'errors', brokers: ['kafka:9092'] },
+      ackPolicy: 'never',
+    }
+    const settings = specToErrorSinkSettings(errors)
+    expect(settings.enabled).toBe(true)
+    expect(settings.connectorType).toBe('kafka')
+    expect(settings.config.topic).toBe('errors')
+    expect(settings.ackPolicy).toBe('never')
+
+    const back = errorSinkSettingsToSpec(settings)
+    expect(back).toEqual(errors)
+  })
+
+  it('applyPipelineSettingsToSpec writes and removes error sink', () => {
+    const withErrors = applyPipelineSettingsToSpec(
+      {},
+      {
+        ...createDefaultPipelineSettings(),
+        errorSink: {
+          enabled: true,
+          connectorType: 'postgresql',
+          config: { table: 'errors', connectionString: 'postgres://localhost/db' },
+          ackPolicy: 'afterMainSinkSuccess',
+        },
+      }
+    )
+    expect(withErrors.errors.type).toBe('postgresql')
+    expect(withErrors.errors.config.table).toBe('errors')
+    expect(withErrors.errors.ackPolicy).toBe('afterMainSinkSuccess')
+
+    const withoutErrors = applyPipelineSettingsToSpec(
+      { errors: { type: 'kafka', config: { topic: 'errors' } } },
+      createDefaultPipelineSettings()
+    )
+    expect(withoutErrors.errors).toBeUndefined()
+  })
+
+  it('specToPipelineSettings reads error sink from spec.errors', () => {
+    const settings = specToPipelineSettings({
+      errors: {
+        type: 'kafka',
+        config: { topic: 'dlq' },
+        ackPolicy: 'never',
+      },
+    })
+    expect(settings.errorSink.enabled).toBe(true)
+    expect(settings.errorSink.connectorType).toBe('kafka')
+    expect(settings.errorSink.config.topic).toBe('dlq')
+    expect(settings.errorSink.ackPolicy).toBe('never')
+  })
+
+  it('graphToManifest round-trips error sink via pipeline settings', () => {
+    const baseSpec = applyPipelineSettingsToSpec(
+      {
+        source: { type: 'kafka', config: { topic: 'in' } },
+        sink: { type: 'postgresql', config: { table: 'out' } },
+      },
+      {
+        ...createDefaultPipelineSettings(),
+        errorSink: {
+          enabled: true,
+          connectorType: 'kafka',
+          config: { topic: 'errors', brokers: ['localhost:9092'] },
+          ackPolicy: 'afterWrite',
+        },
+      },
+      { sourceType: 'kafka' }
+    )
+    const manifest = {
+      metadata: { name: 'test', namespace: 'default' },
+      spec: baseSpec,
+    }
+    const { nodes, edges } = createEmptyGraph()
+    const result = graphToManifest(nodes, edges, manifest)
+    expect(result.spec.errors.type).toBe('kafka')
+    expect(result.spec.errors.config.topic).toBe('errors')
+    expect(result.spec.errors.ackPolicy).toBeUndefined()
   })
 })

@@ -1,7 +1,16 @@
 <template>
   <div class="card runtime">
-    <div class="card-header">
+    <div class="card-header runtime-header">
       <h3>{{ t('metrics.runtimeTitle') }}</h3>
+      <button
+        v-if="canResetCheckpoint"
+        type="button"
+        class="btn btn-secondary btn-sm"
+        :disabled="resetting"
+        @click="confirmOpen = true"
+      >
+        {{ resetting ? t('metrics.resettingCheckpoint') : t('metrics.resetCheckpoint') }}
+      </button>
     </div>
 
     <LoadingSpinner v-if="loading" :message="t('metrics.loadingRuntime')" />
@@ -10,6 +19,9 @@
       {{ t('metrics.noRuntime') }}
     </div>
     <div v-else class="runtime-body">
+      <div v-if="resetSuccess" class="success-message">{{ resetSuccess }}</div>
+      <div v-if="resetError" class="error-message">{{ resetError }}</div>
+
       <div class="runtime-grid">
         <div class="metric-card">
           <h4>{{ t('metrics.checkpointPersistence') }}</h4>
@@ -61,20 +73,84 @@
         <pre class="checkpoint-json">{{ pretty(runtime.conditions) }}</pre>
       </details>
     </div>
+
+    <ConfirmModal
+      :open="confirmOpen"
+      :title="t('metrics.resetCheckpointConfirmTitle')"
+      :message="t('metrics.resetCheckpointConfirmMessage')"
+      :confirm-label="t('metrics.resetCheckpoint')"
+      @cancel="confirmOpen = false"
+      @confirm="onConfirmReset"
+    />
   </div>
 </template>
 
 <script setup>
-import LoadingSpinner from './LoadingSpinner.vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import LoadingSpinner from './LoadingSpinner.vue'
+import ConfirmModal from './ConfirmModal.vue'
+import { getDataFlow, updateDataFlow } from '../api/client'
+import { mergeManifestForUpdate } from '../utils/manifest'
 
-const { t } = useI18n()
-
-defineProps({
+const props = defineProps({
   runtime: { type: Object, default: null },
   loading: { type: Boolean, default: false },
   error: { type: String, default: '' },
+  namespace: { type: String, default: '' },
+  dataflowName: { type: String, default: '' },
 })
+
+const emit = defineEmits(['checkpoint-reset'])
+
+const { t } = useI18n()
+
+const confirmOpen = ref(false)
+const resetting = ref(false)
+const resetError = ref('')
+const resetSuccess = ref('')
+
+const canResetCheckpoint = computed(
+  () => !!props.namespace && !!props.dataflowName && !props.loading
+)
+
+watch(
+  () => [props.namespace, props.dataflowName],
+  () => {
+    resetError.value = ''
+    resetSuccess.value = ''
+  }
+)
+
+async function onConfirmReset() {
+  confirmOpen.value = false
+  if (!props.namespace || !props.dataflowName) return
+
+  resetting.value = true
+  resetError.value = ''
+  resetSuccess.value = ''
+
+  try {
+    const current = await getDataFlow(props.namespace, props.dataflowName)
+    const updated = mergeManifestForUpdate(
+      {
+        ...current,
+        spec: {
+          ...current.spec,
+          checkpointReset: true,
+        },
+      },
+      current
+    )
+    await updateDataFlow(props.namespace, props.dataflowName, updated)
+    resetSuccess.value = t('metrics.resetCheckpointSuccess')
+    emit('checkpoint-reset')
+  } catch (e) {
+    resetError.value = e.message
+  } finally {
+    resetting.value = false
+  }
+}
 
 function pretty(obj) {
   try {
@@ -86,6 +162,13 @@ function pretty(obj) {
 </script>
 
 <style scoped>
+.runtime-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .runtime-body {
   padding: 0.5rem 1rem 1rem;
 }
@@ -99,6 +182,15 @@ function pretty(obj) {
 .hint {
   margin-top: 0.75rem;
   color: var(--text-muted);
+}
+
+.success-message {
+  margin-bottom: 0.75rem;
+  color: var(--success, #15803d);
+}
+
+.error-message {
+  margin-bottom: 0.75rem;
 }
 
 .section {
@@ -140,4 +232,3 @@ function pretty(obj) {
   font-size: 0.9rem;
 }
 </style>
-

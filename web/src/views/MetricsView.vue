@@ -82,7 +82,14 @@
           />
         </div>
 
-        <RuntimePanel :runtime="runtime" :loading="runtimeLoading" :error="runtimeError" />
+        <RuntimePanel
+          :runtime="runtime"
+          :loading="runtimeLoading"
+          :error="runtimeError"
+          :namespace="namespace"
+          :dataflow-name="selectedName"
+          @checkpoint-reset="loadRuntime"
+        />
       </template>
     </div>
   </div>

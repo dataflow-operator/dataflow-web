@@ -7,7 +7,21 @@ export const ACK_GRANULARITY_MESSAGE = 'message'
 
 export const ACK_GRANULARITY_OPTIONS = [ACK_GRANULARITY_BATCH, ACK_GRANULARITY_MESSAGE]
 
+export const ERROR_ACK_POLICIES = ['afterWrite', 'never', 'afterMainSinkSuccess']
+
 const DURATION_REGEX = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/
+
+/**
+ * @returns {import('./usePipelineSettings').ErrorSinkSettings}
+ */
+export function createDefaultErrorSinkSettings() {
+  return {
+    enabled: false,
+    connectorType: 'kafka',
+    config: {},
+    ackPolicy: 'afterWrite',
+  }
+}
 
 /**
  * @returns {import('./usePipelineSettings').PipelineSettings}
@@ -22,6 +36,7 @@ export function createDefaultPipelineSettings() {
     ackGranularity: ACK_GRANULARITY_BATCH,
     replicas: 1,
     channelBufferSize: '',
+    errorSink: createDefaultErrorSinkSettings(),
   }
 }
 
@@ -57,7 +72,53 @@ export function isValidDuration(value) {
  * @property {string} ackGranularity
  * @property {number} replicas
  * @property {number|string} channelBufferSize
+ * @property {ErrorSinkSettings} errorSink
  */
+
+/**
+ * @typedef {Object} ErrorSinkSettings
+ * @property {boolean} enabled
+ * @property {string} connectorType
+ * @property {Object} config
+ * @property {string} ackPolicy
+ */
+
+/**
+ * @param {Object} [errors]
+ * @returns {ErrorSinkSettings}
+ */
+export function specToErrorSinkSettings(errors) {
+  if (!errors?.type) {
+    return createDefaultErrorSinkSettings()
+  }
+  return {
+    enabled: true,
+    connectorType: errors.type,
+    config: errors.config ? JSON.parse(JSON.stringify(errors.config)) : {},
+    ackPolicy: errors.ackPolicy || 'afterWrite',
+  }
+}
+
+/**
+ * @param {ErrorSinkSettings} errorSink
+ * @returns {Object|undefined}
+ */
+export function errorSinkSettingsToSpec(errorSink) {
+  if (!errorSink?.enabled || !errorSink.connectorType) {
+    return undefined
+  }
+  const errors = {
+    type: errorSink.connectorType,
+  }
+  const config = errorSink.config || {}
+  if (Object.keys(config).length > 0) {
+    errors.config = JSON.parse(JSON.stringify(config))
+  }
+  if (errorSink.ackPolicy && errorSink.ackPolicy !== 'afterWrite') {
+    errors.ackPolicy = errorSink.ackPolicy
+  }
+  return errors
+}
 
 /**
  * @param {Object} [spec]
@@ -74,6 +135,7 @@ export function specToPipelineSettings(spec = {}) {
     ackGranularity: spec.ackGranularity || defaults.ackGranularity,
     replicas: spec.replicas ?? defaults.replicas,
     channelBufferSize: spec.channelBufferSize ?? '',
+    errorSink: specToErrorSinkSettings(spec.errors),
   }
 }
 
@@ -144,6 +206,13 @@ export function applyPipelineSettingsToSpec(spec, settings, options = {}) {
     next.channelBufferSize = buffer
   } else {
     delete next.channelBufferSize
+  }
+
+  const errors = errorSinkSettingsToSpec(settings.errorSink)
+  if (errors) {
+    next.errors = errors
+  } else {
+    delete next.errors
   }
 
   return next
