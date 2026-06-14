@@ -329,18 +329,13 @@ function buildManifest() {
     const edgesPlain = JSON.parse(JSON.stringify(edges.value))
     const name = manifestName.value?.trim() || props.initialManifest?.metadata?.name || 'dataflow'
     const ns = props.namespace || props.initialManifest?.metadata?.namespace || 'default'
-    const baseMetadata = {
-      name,
-      namespace: ns,
-      ...(props.initialManifest?.metadata?.resourceVersion && {
-        resourceVersion: props.initialManifest.metadata.resourceVersion,
-      }),
-      ...(props.initialManifest?.metadata?.uid && {
-        uid: props.initialManifest.metadata.uid,
-      }),
-    }
     const manifest = graphToManifest(nodesPlain, edgesPlain, {
-      metadata: baseMetadata,
+      ...(props.initialManifest || {}),
+      metadata: {
+        ...(props.initialManifest?.metadata || {}),
+        name,
+        namespace: ns,
+      },
     })
     return manifest
   } catch {

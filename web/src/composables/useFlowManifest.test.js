@@ -161,4 +161,55 @@ describe('useFlowManifest', () => {
     expect(result.metadata.name).toBe('my-flow')
     expect(result.metadata.namespace).toBe('prod')
   })
+
+  it('graphToManifest preserves non-graph spec fields from baseManifest', () => {
+    const manifest = {
+      metadata: { name: 'test-flow', namespace: 'default' },
+      spec: {
+        source: { type: 'kafka', config: { topic: 'in' } },
+        sink: { type: 'postgresql', config: { table: 'out' } },
+        transformations: [],
+        checkpointPersistence: true,
+        checkpointReset: true,
+        strictIdempotency: true,
+        replicas: 2,
+        errors: {
+          type: 'kafka',
+          config: { topic: 'errors' },
+          ackPolicy: 'afterWrite',
+        },
+      },
+    }
+    const { nodes, edges } = manifestToGraph(manifest)
+    const result = graphToManifest(nodes, edges, manifest)
+    expect(result.spec.checkpointPersistence).toBe(true)
+    expect(result.spec.checkpointReset).toBe(true)
+    expect(result.spec.strictIdempotency).toBe(true)
+    expect(result.spec.replicas).toBe(2)
+    expect(result.spec.errors).toEqual(manifest.spec.errors)
+    expect(result.spec.source.config.topic).toBe('in')
+    expect(result.spec.sink.config.table).toBe('out')
+  })
+
+  it('graphToManifest updates graph fields while preserving other spec fields', () => {
+    const baseManifest = {
+      metadata: { name: 'test-flow', namespace: 'default' },
+      spec: {
+        source: { type: 'kafka', config: { topic: 'old-in' } },
+        sink: { type: 'postgresql', config: { table: 'old-out' } },
+        transformations: [{ type: 'timestamp', config: { fieldName: 'ts' } }],
+        checkpointSyncOnAck: true,
+        ackGranularity: 'message',
+      },
+    }
+    const { nodes, edges } = manifestToGraph(baseManifest)
+    nodes.find((n) => n.id === 'source').data.config = { topic: 'new-in' }
+    nodes.find((n) => n.id === 'sink').data.config = { table: 'new-out' }
+    const result = graphToManifest(nodes, edges, baseManifest)
+    expect(result.spec.source.config.topic).toBe('new-in')
+    expect(result.spec.sink.config.table).toBe('new-out')
+    expect(result.spec.checkpointSyncOnAck).toBe(true)
+    expect(result.spec.ackGranularity).toBe('message')
+    expect(result.spec.transformations).toHaveLength(1)
+  })
 })

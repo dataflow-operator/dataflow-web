@@ -149,22 +149,29 @@ export function graphToManifest(nodes, edges, baseManifest = {}) {
   const cleanSourceConfig = Object.keys(sourceConfig).length ? sourceConfig : undefined
   const cleanSinkConfig = Object.keys(sinkConfig).length ? sinkConfig : undefined
 
+  const spec = baseManifest?.spec
+    ? JSON.parse(JSON.stringify(baseManifest.spec))
+    : {}
+
+  spec.source = {
+    type: sourceNode.data?.connectorType || 'kafka',
+    config: cleanSourceConfig,
+  }
+  spec.sink = {
+    type: sinkNode.data?.connectorType || 'postgresql',
+    config: cleanSinkConfig,
+  }
+  if (transformations.length > 0) {
+    spec.transformations = transformations
+  } else {
+    delete spec.transformations
+  }
+
   return {
-    apiVersion: 'dataflow.dataflow.io/v1',
-    kind: 'DataFlow',
+    apiVersion: baseManifest.apiVersion || 'dataflow.dataflow.io/v1',
+    kind: baseManifest.kind || 'DataFlow',
     metadata: baseManifest.metadata || { name: '', namespace: 'default' },
-    spec: {
-      source: {
-        type: sourceNode.data?.connectorType || 'kafka',
-        config: cleanSourceConfig,
-      },
-      sink: {
-        type: sinkNode.data?.connectorType || 'postgresql',
-        config: cleanSinkConfig,
-      },
-      transformations:
-        transformations.length > 0 ? transformations : undefined,
-    },
+    spec,
   }
 }
 

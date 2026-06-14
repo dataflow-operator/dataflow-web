@@ -169,6 +169,7 @@ const constructorModal = ref({
   open: false,
   title: '',
   manifest: null,
+  originalManifest: null,
   namespace: 'default',
   mode: 'create',
   editingNamespace: '',
@@ -238,6 +239,7 @@ async function openCreateInConstructor() {
     open: true,
     title: t('manifests.createTitle'),
     manifest: null,
+    originalManifest: null,
     namespace: ns,
     mode: 'create',
     editingNamespace: ns,
@@ -253,6 +255,7 @@ async function openEditInConstructor(ns, name) {
       open: true,
       title: t('manifests.editTitle', { name, ns }),
       manifest: df,
+      originalManifest: df,
       namespace: ns,
       mode: 'edit',
       editingNamespace: ns,
@@ -268,9 +271,10 @@ function onConstructorSave(manifest, err) {
     showError(err?.message || 'Invalid flow')
     return
   }
-  const { editingNamespace, editingName, mode } = constructorModal.value
+  const { editingNamespace, editingName, mode, originalManifest } = constructorModal.value
   if (mode === 'edit') {
-    updateDataFlow(editingNamespace, editingName, manifest)
+    const toUpdate = originalManifest ? mergeManifestForUpdate(manifest, originalManifest) : manifest
+    updateDataFlow(editingNamespace, editingName, toUpdate)
       .then(() => {
         constructorModal.value.open = false
         loadDataFlows()
