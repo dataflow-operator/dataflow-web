@@ -77,6 +77,8 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case filteredParts[0] == "dataflows":
 		h.handleDataFlows(w, r, filteredParts[1:])
+	case filteredParts[0] == "dataflowcrons":
+		h.handleDataFlowCrons(w, r, filteredParts[1:])
 	case filteredParts[0] == "secrets":
 		h.handleSecrets(w, r, filteredParts[1:])
 	case filteredParts[0] == "logs":
@@ -241,24 +243,36 @@ func (h *APIHandler) deleteDataFlow(w http.ResponseWriter, r *http.Request, name
 func (h *APIHandler) handleLogs(w http.ResponseWriter, r *http.Request, parts []string) {
 	namespace := r.URL.Query().Get("namespace")
 	name := r.URL.Query().Get("name")
+	kind := r.URL.Query().Get("kind")
 	tailLines := r.URL.Query().Get("tailLines")
 	follow := r.URL.Query().Get("follow") == "true"
+	step := r.URL.Query().Get("step")
+	runID := r.URL.Query().Get("runId")
 
 	if namespace == "" || name == "" {
 		http.Error(w, "namespace and name required", http.StatusBadRequest)
 		return
 	}
 
-	pods, err := h.server.k8sClient.CoreV1().Pods(namespace).List(r.Context(), metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("dataflow.dataflow.io/name=%s", name),
-	})
+	var pods *corev1.PodList
+	var err error
+	var containerName string
+
+	if kind == "dataflowcron" {
+		pods, containerName, err = h.listDataFlowCronPods(r, namespace, name, step, runID)
+	} else {
+		pods, err = h.server.k8sClient.CoreV1().Pods(namespace).List(r.Context(), metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("dataflow.dataflow.io/name=%s", name),
+		})
+		containerName = "processor"
+	}
 	if err != nil {
 		h.server.logger.Error(err, "Failed to list pods")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if len(pods.Items) == 0 {
+	if len(pods.Items) == 0 && kind != "dataflowcron" {
 		podName := k8snames.ProcessorDeployment(name)
 		pod, err := h.server.k8sClient.CoreV1().Pods(namespace).Get(r.Context(), podName, metav1.GetOptions{})
 		if err != nil {
@@ -279,8 +293,13 @@ func (h *APIHandler) handleLogs(w http.ResponseWriter, r *http.Request, parts []
 		return
 	}
 
-	pod := pods.Items[0]
-	containerName := "processor"
+	pod := selectNewestPod(pods.Items)
+	if containerName == "" && len(pod.Spec.Containers) > 0 {
+		containerName = pod.Spec.Containers[0].Name
+	}
+	if containerName == "" {
+		containerName = "processor"
+	}
 
 	opts := &corev1.PodLogOptions{
 		Container: containerName,

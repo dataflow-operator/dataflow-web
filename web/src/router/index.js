@@ -15,6 +15,12 @@ const routes = [
     meta: { titleKey: 'nav.manifests' },
   },
   {
+    path: '/crons',
+    name: 'crons',
+    component: () => import('../views/DataFlowCronsView.vue'),
+    meta: { titleKey: 'nav.crons' },
+  },
+  {
     path: '/connections',
     name: 'connections',
     component: () => import('../views/ConnectionsView.vue'),

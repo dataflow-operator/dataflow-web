@@ -67,13 +67,76 @@ export async function deleteDataFlow(namespace, name) {
   }
 }
 
-export async function getLogs(namespace, name, { tailLines = 100 } = {}) {
-  const path = `/logs?namespace=${encodeURIComponent(namespace)}&name=${encodeURIComponent(name)}&tailLines=${tailLines}&follow=false`
+export async function listDataFlowCrons(namespace = 'default') {
+  return request(`/dataflowcrons?namespace=${encodeURIComponent(namespace)}`)
+}
+
+export async function getDataFlowCron(namespace, name) {
+  return request(
+    `/dataflowcrons/${encodeURIComponent(name)}?namespace=${encodeURIComponent(namespace)}`
+  )
+}
+
+export async function createDataFlowCron(namespace, body) {
+  return request(`/dataflowcrons?namespace=${encodeURIComponent(namespace)}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateDataFlowCron(namespace, name, body) {
+  return request(
+    `/dataflowcrons/${encodeURIComponent(name)}?namespace=${encodeURIComponent(namespace)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }
+  )
+}
+
+export async function deleteDataFlowCron(namespace, name) {
+  const url = `${API_BASE}/dataflowcrons/${encodeURIComponent(name)}?namespace=${encodeURIComponent(namespace)}`
+  const res = await fetch(url, { method: 'DELETE' })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `HTTP ${res.status}`)
+  }
+}
+
+export async function triggerDataFlowCron(namespace, name) {
+  return request(
+    `/dataflowcrons/${encodeURIComponent(name)}/trigger?namespace=${encodeURIComponent(namespace)}`,
+    { method: 'POST' }
+  )
+}
+
+export async function suspendDataFlowCron(namespace, name, suspend) {
+  return request(
+    `/dataflowcrons/${encodeURIComponent(name)}/suspend?namespace=${encodeURIComponent(namespace)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ suspend }),
+    }
+  )
+}
+
+function logsQuery(namespace, name, { tailLines = 100, kind = '' } = {}) {
+  const params = new URLSearchParams({
+    namespace,
+    name,
+    tailLines: String(tailLines),
+  })
+  if (kind) params.set('kind', kind)
+  return params.toString()
+}
+
+export async function getLogs(namespace, name, { tailLines = 100, kind = '' } = {}) {
+  const path = `/logs?${logsQuery(namespace, name, { tailLines, kind })}&follow=false`
   return requestText(path)
 }
 
-export function createLogStream(namespace, name, { tailLines = 100 } = {}, onMessage) {
-  const path = `${API_BASE}/logs?namespace=${encodeURIComponent(namespace)}&name=${encodeURIComponent(name)}&tailLines=${tailLines}&follow=true`
+export function createLogStream(namespace, name, { tailLines = 100, kind = '' } = {}, onMessage) {
+  const path = `${API_BASE}/logs?${logsQuery(namespace, name, { tailLines, kind })}&follow=true`
   const es = new EventSource(path)
   es.onmessage = (e) => onMessage(e.data)
   return () => es.close()

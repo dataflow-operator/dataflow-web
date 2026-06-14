@@ -6,7 +6,7 @@ Web UI and server for managing [DataFlow Operator](https://github.com/dataflow-o
 
 - **web/** — Vue 3 + Vite frontend (dashboard, manifests, logs, metrics). Build: `cd web && npm install && npm run build`; output in `web/dist/`, copied into the Docker image as `/app/static`.
 - **cmd/server/** — GUI server entrypoint.
-- **internal/gui/** — HTTP server, static file serving and API (`/api/dataflows`, `/api/logs`, `/api/status`, `/api/namespaces`).
+- **internal/gui/** — HTTP server, static file serving and API (`/api/dataflows`, `/api/dataflowcrons`, `/api/logs`, `/api/status`, `/api/namespaces`).
 
 The image is built **separately** from the operator image. On `docker build`, the frontend (Node) is built first, then the Go server; static assets come from the Vue build.
 
@@ -54,8 +54,14 @@ go run ./cmd/server --bind-address=:8080
 **Option 2 — frontend dev with hot reload:**
 
 ```bash
+# From monorepo: use GOWORK=off (go.work pulls dataflow-cli → missing dataflow-processor)
+# Easiest: task dev (sets GOWORK=off automatically)
+
+task dev
+
+# Or manually:
 # Terminal 1: backend
-cd dataflow-web && go run ./cmd/server --bind-address=:8080
+cd dataflow-web && GOWORK=off go run ./cmd/server --bind-address=:8080
 
 # Terminal 2: frontend (proxy to :8080)
 cd dataflow-web/web && npm install && npm run dev

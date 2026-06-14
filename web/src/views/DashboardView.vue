@@ -13,6 +13,11 @@
             <div class="value">{{ totalCount }}</div>
           </div>
           <div class="metric-card">
+            <h3>{{ t('dashboard.totalCrons') }}</h3>
+            <div class="value">{{ totalCronCount }}</div>
+            <router-link :to="{ name: 'crons' }" class="ns-link">{{ t('dashboard.openCrons') }} →</router-link>
+          </div>
+          <div class="metric-card">
             <h3>{{ t('dashboard.running') }}</h3>
             <div class="value">{{ byPhase.Running ?? 0 }}</div>
           </div>
@@ -56,18 +61,22 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getNamespaces } from '../api/client'
-import { listDataFlows } from '../api/client'
+import { getNamespaces, listDataFlows, listDataFlowCrons } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 
 const { t } = useI18n()
 const namespaces = ref([])
 const byNamespace = ref({})
+const cronByNamespace = ref({})
 const loading = ref(true)
 const error = ref('')
 
 const totalCount = computed(() => {
   return Object.values(byNamespace.value).reduce((sum, list) => sum + list.length, 0)
+})
+
+const totalCronCount = computed(() => {
+  return Object.values(cronByNamespace.value).reduce((sum, list) => sum + list.length, 0)
 })
 
 const byPhase = computed(() => {
@@ -87,14 +96,21 @@ async function load() {
   try {
     namespaces.value = await getNamespaces()
     const data = {}
+    const cronData = {}
     for (const ns of namespaces.value) {
       try {
         data[ns] = await listDataFlows(ns)
       } catch {
         data[ns] = []
       }
+      try {
+        cronData[ns] = await listDataFlowCrons(ns)
+      } catch {
+        cronData[ns] = []
+      }
     }
     byNamespace.value = data
+    cronByNamespace.value = cronData
   } catch (e) {
     error.value = e.message
   } finally {

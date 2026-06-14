@@ -1,8 +1,13 @@
 # Taskfile for dataflow-web: build and dev mode.
 # Install: https://taskfile.dev/install (go install github.com/go-task/task/v3/cmd/task@latest)
 # Run: task <task_name>
+#
+# GOWORK=off: root go.work pulls in dataflow-cli → ../dataflow-processor (often absent locally).
 
 version: '3'
+
+env:
+  GOWORK: off
 
 vars:
   BIND: ':8080'
@@ -103,6 +108,12 @@ tasks:
     dir: '{{.WEB_DIR}}'
     cmds:
       - npm run test:run
+
+  # Go unit tests (gui package)
+  test:
+    desc: Run Go API handler tests
+    cmds:
+      - go test ./internal/gui/... -count=1
 
   # Build Docker image
   docker:

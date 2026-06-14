@@ -9,22 +9,28 @@
         <select
           v-model="namespace"
           class="form-select"
-          @change="loadDataFlowList"
+          @change="loadResourceList"
         >
           <option value="">{{ t('common.loading') }}</option>
           <option v-for="ns in namespaces" :key="ns" :value="ns">{{ ns }}</option>
         </select>
       </div>
       <div class="form-group">
-        <label>{{ t('common.dataflow') }}</label>
+        <label>{{ t('logs.resourceKind') }}</label>
+        <select v-model="resourceKind" class="form-select" @change="onKindChange">
+          <option value="dataflow">{{ t('logs.kindDataflow') }}</option>
+          <option value="dataflowcron">{{ t('logs.kindDataflowCron') }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>{{ resourceKind === 'dataflowcron' ? t('logs.kindDataflowCron') : t('common.dataflow') }}</label>
         <select
           v-model="selectedName"
           class="form-select"
-          @change="onDataFlowChange"
         >
-          <option value="">{{ t('logs.selectDataflow') }}</option>
-          <option v-for="df in dataflowList" :key="df.metadata.name" :value="df.metadata.name">
-            {{ df.metadata.name }}
+          <option value="">{{ selectPlaceholder }}</option>
+          <option v-for="item in resourceList" :key="item.metadata.name" :value="item.metadata.name">
+            {{ item.metadata.name }}
           </option>
         </select>
       </div>
@@ -70,19 +76,27 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getNamespaces } from '../api/client'
-import { listDataFlows, getLogs, createLogStream } from '../api/client'
+import {
+  getNamespaces,
+  listDataFlows,
+  listDataFlowCrons,
+  getLogs,
+  createLogStream,
+} from '../api/client'
 import { useToast } from '../composables/useToast'
 import { useFilterQueryParams } from '../composables/useFilterQueryParams'
 
 const { t } = useI18n()
 const { success } = useToast()
+const route = useRoute()
 
 const { namespace, dataflow: selectedName } = useFilterQueryParams({ dataflow: true })
 const namespaces = ref([])
-const dataflowList = ref([])
+const resourceList = ref([])
+const resourceKind = ref(route.query.kind === 'dataflowcron' ? 'dataflowcron' : 'dataflow')
 const tailLines = ref(100)
 const logsText = ref('')
 const logsVisible = ref(false)
@@ -91,6 +105,14 @@ const follow = ref(false)
 const connecting = ref(false)
 let stopStream = null
 const logsContainer = ref(null)
+
+const selectPlaceholder = computed(() =>
+  resourceKind.value === 'dataflowcron' ? t('logs.selectDataflowCron') : t('logs.selectDataflow')
+)
+
+const logsKindParam = computed(() =>
+  resourceKind.value === 'dataflowcron' ? 'dataflowcron' : ''
+)
 
 async function loadNamespaces() {
   try {
@@ -103,24 +125,40 @@ async function loadNamespaces() {
   }
 }
 
-async function loadDataFlowList() {
+async function loadResourceList() {
   if (!namespace.value) return
   try {
-    dataflowList.value = await listDataFlows(namespace.value)
-    if (!dataflowList.value.some((df) => df.metadata.name === selectedName.value)) {
+    resourceList.value =
+      resourceKind.value === 'dataflowcron'
+        ? await listDataFlowCrons(namespace.value)
+        : await listDataFlows(namespace.value)
+    if (!resourceList.value.some((item) => item.metadata.name === selectedName.value)) {
       selectedName.value = ''
     }
   } catch {
-    dataflowList.value = []
+    resourceList.value = []
     selectedName.value = ''
   }
 }
 
-function onDataFlowChange() {}
+function onKindChange() {
+  selectedName.value = ''
+  loadResourceList()
+}
 
-watch(namespace, loadDataFlowList)
+watch(namespace, loadResourceList)
+watch(
+  () => route.query.kind,
+  (kind) => {
+    if (kind === 'dataflowcron' || kind === 'dataflow') {
+      resourceKind.value = kind
+      loadResourceList()
+    }
+  }
+)
+
 onMounted(() => {
-  loadNamespaces().then(() => loadDataFlowList())
+  loadNamespaces().then(() => loadResourceList())
 })
 
 function scrollToBottom() {
@@ -135,7 +173,10 @@ async function loadLogs() {
   loading.value = true
   logsText.value = ''
   try {
-    logsText.value = await getLogs(namespace.value, selectedName.value, { tailLines: tailLines.value })
+    logsText.value = await getLogs(namespace.value, selectedName.value, {
+      tailLines: tailLines.value,
+      kind: logsKindParam.value,
+    })
     nextTick(() => scrollToBottom())
   } catch (e) {
     logsText.value = t('common.error') + ': ' + e.message
@@ -160,7 +201,7 @@ function toggleFollow() {
   stopStream = createLogStream(
     namespace.value,
     selectedName.value,
-    { tailLines: tailLines.value },
+    { tailLines: tailLines.value, kind: logsKindParam.value },
     (line) => {
       connecting.value = false
       logsText.value += line + '\n'
