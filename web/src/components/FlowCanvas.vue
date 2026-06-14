@@ -16,6 +16,14 @@
       <button
         type="button"
         class="btn btn-secondary btn-sm"
+        :class="{ 'btn-active': settingsPanelOpen }"
+        @click="settingsPanelOpen = !settingsPanelOpen"
+      >
+        {{ t('flow.pipelineSettings') }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-secondary btn-sm"
         :disabled="!previewManifest"
         @click="openPreview"
       >
@@ -41,6 +49,7 @@
         {{ t('flow.save') }}
       </button>
     </div>
+    <div class="flow-main">
     <div class="flow-canvas">
       <VueFlow
         v-model:nodes="nodes"
@@ -69,6 +78,14 @@
           />
         </template>
       </VueFlow>
+    </div>
+
+    <PipelineSettingsPanel
+      v-if="settingsPanelOpen"
+      v-model="pipelineSettings"
+      :source-type="sourceConnectorType"
+      @close="settingsPanelOpen = false"
+    />
     </div>
 
     <NodeConfigPanel
@@ -105,6 +122,7 @@ import SourceNode from './flow/SourceNode.vue'
 import SinkNode from './flow/SinkNode.vue'
 import TransformationNode from './flow/TransformationNode.vue'
 import NodeConfigPanel from './NodeConfigPanel.vue'
+import PipelineSettingsPanel from './PipelineSettingsPanel.vue'
 import YamlEditorModal from './YamlEditorModal.vue'
 import { useToast } from '../composables/useToast'
 import yaml from 'js-yaml'
@@ -115,6 +133,11 @@ import {
   CONNECTOR_TYPES,
   TRANSFORMATION_TYPES,
 } from '../composables/useFlowManifest'
+import {
+  specToPipelineSettings,
+  applyPipelineSettingsToSpec,
+  createDefaultPipelineSettings,
+} from '../composables/usePipelineSettings'
 
 const props = defineProps({
   initialManifest: { type: Object, default: null },
@@ -140,6 +163,13 @@ const configPanel = ref({
 })
 
 const previewOpen = ref(false)
+const settingsPanelOpen = ref(false)
+const pipelineSettings = ref(createDefaultPipelineSettings())
+
+const sourceConnectorType = computed(() => {
+  const source = nodes.value.find((n) => n.id === 'source')
+  return source?.data?.connectorType || 'kafka'
+})
 
 const LAYOUT_SPACING = 220
 
@@ -177,11 +207,13 @@ function initFromManifest(manifest) {
     nodes.value = n
     edges.value = e
     manifestName.value = manifest.metadata?.name || ''
+    pipelineSettings.value = specToPipelineSettings(manifest.spec)
   } else {
     const { nodes: n, edges: e } = createEmptyGraph()
     nodes.value = n
     edges.value = e
     manifestName.value = ''
+    pipelineSettings.value = createDefaultPipelineSettings()
   }
   applyLayout()
 }
@@ -329,6 +361,11 @@ function buildManifest() {
     const edgesPlain = JSON.parse(JSON.stringify(edges.value))
     const name = manifestName.value?.trim() || props.initialManifest?.metadata?.name || 'dataflow'
     const ns = props.namespace || props.initialManifest?.metadata?.namespace || 'default'
+    const baseSpec = applyPipelineSettingsToSpec(
+      { ...(props.initialManifest?.spec || {}) },
+      pipelineSettings.value,
+      { sourceType: sourceConnectorType.value }
+    )
     const manifest = graphToManifest(nodesPlain, edgesPlain, {
       ...(props.initialManifest || {}),
       metadata: {
@@ -336,6 +373,7 @@ function buildManifest() {
         name,
         namespace: ns,
       },
+      spec: baseSpec,
     })
     return manifest
   } catch {
@@ -419,9 +457,21 @@ function copyManifest() {
   font-size: 0.95rem;
 }
 
+.flow-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .flow-canvas {
   flex: 1;
   min-height: 400px;
+  min-width: 0;
+}
+
+.flow-toolbar .btn-active {
+  background: var(--primary);
+  color: white;
 }
 
 .flow-canvas :deep(.vue-flow) {

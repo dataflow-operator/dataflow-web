@@ -1,0 +1,158 @@
+/**
+ * Pipeline-level spec settings (fault tolerance, scaling, throughput).
+ */
+
+export const ACK_GRANULARITY_BATCH = 'batch'
+export const ACK_GRANULARITY_MESSAGE = 'message'
+
+export const ACK_GRANULARITY_OPTIONS = [ACK_GRANULARITY_BATCH, ACK_GRANULARITY_MESSAGE]
+
+const DURATION_REGEX = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/
+
+/**
+ * @returns {import('./usePipelineSettings').PipelineSettings}
+ */
+export function createDefaultPipelineSettings() {
+  return {
+    checkpointPersistence: true,
+    checkpointSyncOnAck: false,
+    checkpointSaveInterval: '',
+    checkpointReset: false,
+    strictIdempotency: false,
+    ackGranularity: ACK_GRANULARITY_BATCH,
+    replicas: 1,
+    channelBufferSize: '',
+  }
+}
+
+/**
+ * @param {*} value - Duration from manifest (string or metav1 object)
+ * @returns {string}
+ */
+export function formatDurationForInput(value) {
+  if (value == null || value === '') return ''
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'object' && value.duration != null) {
+    return String(value.duration).trim()
+  }
+  return String(value).trim()
+}
+
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
+export function isValidDuration(value) {
+  if (!value || typeof value !== 'string') return false
+  return DURATION_REGEX.test(value.trim())
+}
+
+/**
+ * @typedef {Object} PipelineSettings
+ * @property {boolean} checkpointPersistence
+ * @property {boolean} checkpointSyncOnAck
+ * @property {string} checkpointSaveInterval
+ * @property {boolean} checkpointReset
+ * @property {boolean} strictIdempotency
+ * @property {string} ackGranularity
+ * @property {number} replicas
+ * @property {number|string} channelBufferSize
+ */
+
+/**
+ * @param {Object} [spec]
+ * @returns {PipelineSettings}
+ */
+export function specToPipelineSettings(spec = {}) {
+  const defaults = createDefaultPipelineSettings()
+  return {
+    checkpointPersistence: spec.checkpointPersistence ?? defaults.checkpointPersistence,
+    checkpointSyncOnAck: spec.checkpointSyncOnAck ?? defaults.checkpointSyncOnAck,
+    checkpointSaveInterval: formatDurationForInput(spec.checkpointSaveInterval),
+    checkpointReset: spec.checkpointReset ?? false,
+    strictIdempotency: spec.strictIdempotency ?? defaults.strictIdempotency,
+    ackGranularity: spec.ackGranularity || defaults.ackGranularity,
+    replicas: spec.replicas ?? defaults.replicas,
+    channelBufferSize: spec.channelBufferSize ?? '',
+  }
+}
+
+/**
+ * @param {Object} spec
+ * @param {PipelineSettings} settings
+ * @param {{ sourceType?: string }} [options]
+ * @returns {Object}
+ */
+export function applyPipelineSettingsToSpec(spec, settings, options = {}) {
+  const next = { ...spec }
+  const defaults = createDefaultPipelineSettings()
+  const sourceType = options.sourceType || spec.source?.type || ''
+
+  if (settings.checkpointPersistence !== defaults.checkpointPersistence) {
+    next.checkpointPersistence = settings.checkpointPersistence
+  } else {
+    delete next.checkpointPersistence
+  }
+
+  if (settings.checkpointSyncOnAck) {
+    next.checkpointSyncOnAck = true
+  } else {
+    delete next.checkpointSyncOnAck
+  }
+
+  if (settings.checkpointReset) {
+    next.checkpointReset = true
+  } else {
+    delete next.checkpointReset
+  }
+
+  if (settings.strictIdempotency) {
+    next.strictIdempotency = true
+  } else {
+    delete next.strictIdempotency
+  }
+
+  const interval = formatDurationForInput(settings.checkpointSaveInterval)
+  if (interval) {
+    if (isValidDuration(interval)) {
+      next.checkpointSaveInterval = interval
+    }
+  } else {
+    delete next.checkpointSaveInterval
+  }
+
+  if (settings.ackGranularity && settings.ackGranularity !== defaults.ackGranularity) {
+    next.ackGranularity = settings.ackGranularity
+  } else {
+    delete next.ackGranularity
+  }
+
+  const isKafka = sourceType === 'kafka'
+  if (isKafka) {
+    const replicas = Number(settings.replicas)
+    if (!Number.isNaN(replicas) && replicas >= 0 && replicas !== defaults.replicas) {
+      next.replicas = replicas
+    } else {
+      delete next.replicas
+    }
+  } else {
+    delete next.replicas
+  }
+
+  const buffer = Number(settings.channelBufferSize)
+  if (!Number.isNaN(buffer) && buffer > 0) {
+    next.channelBufferSize = buffer
+  } else {
+    delete next.channelBufferSize
+  }
+
+  return next
+}
+
+/**
+ * @param {string} sourceType
+ * @returns {boolean}
+ */
+export function isReplicasSupported(sourceType) {
+  return sourceType === 'kafka'
+}
