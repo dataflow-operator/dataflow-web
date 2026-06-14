@@ -6,6 +6,7 @@ import * as client from '../api/client'
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
+  useRouter: () => ({ replace: vi.fn() }),
 }))
 
 const i18n = createI18n({

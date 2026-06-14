@@ -99,14 +99,14 @@ import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import { getNamespaces } from '../api/client'
 import { listDataFlows, getEvents } from '../api/client'
+import { useFilterQueryParams } from '../composables/useFilterQueryParams'
 
 const { t, locale } = useI18n()
 
-const namespace = ref('default')
+const { namespace, dataflow: selectedName } = useFilterQueryParams({ dataflow: true })
 const namespaces = ref([])
 const dataflowList = ref([])
-const filterMode = ref('all')
-const selectedName = ref('')
+const filterMode = ref(selectedName.value ? 'manifest' : 'all')
 const events = ref([])
 const loading = ref(false)
 const error = ref('')

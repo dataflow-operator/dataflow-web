@@ -120,10 +120,10 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import NamespaceSelect from '../components/NamespaceSelect.vue'
+import { useFilterQueryParams } from '../composables/useFilterQueryParams'
 import YamlEditorModal from '../components/YamlEditorModal.vue'
 import ConfirmModal from '../components/ConfirmModal.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -142,8 +142,7 @@ import { sanitizeManifestForDisplay, mergeManifestForUpdate } from '../utils/man
 const { t } = useI18n()
 const { success, error: showError } = useToast()
 
-const route = useRoute()
-const namespace = ref(route.query.namespace || 'default')
+const { namespace } = useFilterQueryParams()
 const dataflows = ref([])
 const loading = ref(false)
 const error = ref('')
@@ -209,11 +208,7 @@ async function loadDataFlows() {
 
 watch(namespace, (ns) => {
   if (ns) loadDataFlows()
-})
-
-onMounted(() => {
-  if (route.query.namespace) namespace.value = route.query.namespace
-})
+}, { immediate: true })
 
 async function openEdit(ns, name) {
   try {

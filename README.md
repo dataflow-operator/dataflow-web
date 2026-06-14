@@ -12,7 +12,7 @@ The image is built **separately** from the operator image. On `docker build`, th
 
 ## Building the image
 
-The `github.com/dataflow-operator/dataflow` dependency is fetched from GitHub (main/master branch), no local `replace`. Build from the **dataflow-web** directory:
+The `github.com/dataflow-operator/dataflow` dependency is fetched from GitHub (main/master branch), no local `replace`. In this monorepo, local Go runs can use the root `go.work` workspace, while Docker still resolves dependencies from module versions. Build from the **dataflow-web** directory:
 
 ```bash
 # from dataflow-web directory

@@ -3,6 +3,11 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { i18n, setLocale } from '../i18n'
 import EventsView from './EventsView.vue'
 
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: {} }),
+  useRouter: () => ({ replace: vi.fn() }),
+}))
+
 vi.mock('../api/client', () => ({
   getNamespaces: vi.fn(),
   listDataFlows: vi.fn(),

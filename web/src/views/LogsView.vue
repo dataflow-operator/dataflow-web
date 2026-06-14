@@ -75,14 +75,14 @@ import { useI18n } from 'vue-i18n'
 import { getNamespaces } from '../api/client'
 import { listDataFlows, getLogs, createLogStream } from '../api/client'
 import { useToast } from '../composables/useToast'
+import { useFilterQueryParams } from '../composables/useFilterQueryParams'
 
 const { t } = useI18n()
 const { success } = useToast()
 
-const namespace = ref('default')
+const { namespace, dataflow: selectedName } = useFilterQueryParams({ dataflow: true })
 const namespaces = ref([])
 const dataflowList = ref([])
-const selectedName = ref('')
 const tailLines = ref(100)
 const logsText = ref('')
 const logsVisible = ref(false)

@@ -92,9 +92,9 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import NamespaceSelect from '../components/NamespaceSelect.vue'
+import { useFilterQueryParams } from '../composables/useFilterQueryParams'
 import ConnectionFormModal from '../components/ConnectionFormModal.vue'
 import ConfirmModal from '../components/ConfirmModal.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -112,8 +112,7 @@ const CONNECTION_TYPE_LABEL = 'dataflow.dataflow.io/connection-type'
 const { t } = useI18n()
 const { success, error: showError } = useToast()
 
-const route = useRoute()
-const namespace = ref(route.query.namespace || 'default')
+const { namespace } = useFilterQueryParams()
 const secrets = ref([])
 const loading = ref(false)
 const error = ref('')
@@ -171,7 +170,6 @@ watch(namespace, (ns) => {
 })
 
 onMounted(() => {
-  if (route.query.namespace) namespace.value = route.query.namespace
   loadSecrets()
 })
 

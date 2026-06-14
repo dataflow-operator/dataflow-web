@@ -94,15 +94,15 @@ import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import MetricsChart from '../components/MetricsChart.vue'
 import RuntimePanel from '../components/RuntimePanel.vue'
+import { useFilterQueryParams } from '../composables/useFilterQueryParams'
 
 const { t, locale } = useI18n()
 import { getNamespaces } from '../api/client'
 import { listDataFlows, getStatus, getRuntime, getPrometheusRange } from '../api/client'
 
-const namespace = ref('default')
+const { namespace, dataflow: selectedName } = useFilterQueryParams({ dataflow: true })
 const namespaces = ref([])
 const dataflowList = ref([])
-const selectedName = ref('')
 const status = ref(null)
 const loading = ref(false)
 const error = ref('')
@@ -224,7 +224,11 @@ async function loadChart(panel, range) {
 
 watch(namespace, loadDataFlowList)
 onMounted(() => {
-  loadNamespaces().then(() => loadDataFlowList())
+  loadNamespaces().then(() =>
+    loadDataFlowList().then(() => {
+      if (selectedName.value) loadMetrics()
+    })
+  )
 })
 </script>
 
