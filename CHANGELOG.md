@@ -1,5 +1,9 @@
 ## Commits
 
+- fac0179 Implement PostgreSQL CDC connector support in ConnectorConfigForm
+
+## Commits
+
 - 2c63e0e Add Pipeline Settings Panel and integrate with FlowCanvas
 - 08808a9 Enhance Iceberg Connector Support and Add Error Sink Configuration
 
