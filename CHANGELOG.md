@@ -1,5 +1,10 @@
 ## Commits
 
+- 2c63e0e Add Pipeline Settings Panel and integrate with FlowCanvas
+- 08808a9 Enhance Iceberg Connector Support and Add Error Sink Configuration
+
+## Commits
+
 - 3fd52a1 Replace release notes generator with custom commit list notes script
 - d3c5758 Enhance URL query parameter handling by introducing useFilterQueryParams composable. Update README for clarity on building the image. Refactor ConnectionsView, EventsView, LogsView, ManifestsView, MetricsView to utilize new composable for managing namespace and dataflow state.
 - 56a4dcc Implement DataFlowCron management features, including API endpoints and UI components. Update README for new API routes and enhance task configurations. Add localization support for cron-related terms and improve log handling for different resource types.
