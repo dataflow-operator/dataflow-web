@@ -6,6 +6,7 @@
 const CONNECTOR_KNOWN_KEYS = {
   kafka: ['brokers', 'topic', 'consumerGroup', 'format'],
   postgresql: ['connectionString', 'table', 'query', 'autoCreateTable', 'batchSize', 'rawMode', 'orderByColumn', 'changeTrackingColumn', 'readBatchSize', 'pollInterval', 'upsertMode', 'conflictKey'],
+  'postgresql-cdc': ['connectionString', 'slotName', 'publicationName', 'tables', 'snapshotMode', 'createSlotIfNotExists', 'createPublicationIfNotExists', 'heartbeatIntervalSeconds', 'primaryKeyColumn', 'includeColumns', 'excludeColumns', 'envelopeFormat'],
   trino: ['serverURL', 'catalog', 'schema', 'table', 'query', 'orderByColumn', 'changeTrackingColumn', 'readBatchSize', 'pollInterval', 'upsertMode', 'conflictKey'],
   clickhouse: ['connectionString', 'table', 'query', 'autoCreateTable', 'batchSize', 'rawMode', 'orderByColumn', 'changeTrackingColumn', 'readBatchSize', 'pollInterval', 'upsertMode', 'conflictKey'],
   nessie: ['baseURL', 'namespace', 'table', 'branch'],
@@ -20,7 +21,7 @@ const CONNECTOR_KNOWN_KEYS = {
 
 export const SINK_IDEMPOTENCY_CONNECTORS = ['postgresql', 'trino', 'clickhouse', 'iceberg']
 
-export const POLLING_SOURCE_TYPES = ['postgresql', 'clickhouse', 'trino', 'nessie', 'iceberg']
+export const POLLING_SOURCE_TYPES = ['postgresql', 'postgresql-cdc', 'clickhouse', 'trino', 'nessie', 'iceberg']
 
 /**
  * Check if config uses SecretRef (from Connection selection) - cannot fully populate structured form
@@ -157,6 +158,22 @@ export function configToForm(config, connectorType, role = 'sink') {
         ...(role === 'sink' ? sinkIdempotencyFromConfig(c) : {}),
         advancedJson,
       }
+    case 'postgresql-cdc':
+      return {
+        connectionString: c.connectionString || '',
+        slotName: c.slotName || '',
+        publicationName: c.publicationName || '',
+        tables: Array.isArray(c.tables) ? c.tables.join('\n') : '',
+        snapshotMode: c.snapshotMode || 'initial',
+        createSlotIfNotExists: c.createSlotIfNotExists !== false,
+        createPublicationIfNotExists: c.createPublicationIfNotExists !== false,
+        heartbeatIntervalSeconds: c.heartbeatIntervalSeconds ?? 10,
+        primaryKeyColumn: c.primaryKeyColumn || '',
+        includeColumns: Array.isArray(c.includeColumns) ? c.includeColumns.join('\n') : '',
+        excludeColumns: Array.isArray(c.excludeColumns) ? c.excludeColumns.join('\n') : '',
+        envelopeFormat: c.envelopeFormat || 'row',
+        advancedJson,
+      }
     case 'trino':
       return {
         serverURL: c.serverURL || '',
@@ -260,6 +277,39 @@ export function formToConfig(form, connectorType, role = 'sink', advancedConfig 
           ...sinkIdempotencyToConfig(form, role),
         }
         break
+      case 'postgresql-cdc': {
+        const tables = (form?.tables || '')
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        const includeColumns = (form?.includeColumns || '')
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        const excludeColumns = (form?.excludeColumns || '')
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        base = {
+          ...(form?.connectionString ? { connectionString: form.connectionString } : {}),
+          ...(form?.slotName ? { slotName: form.slotName } : {}),
+          ...(form?.publicationName ? { publicationName: form.publicationName } : {}),
+          ...(tables.length ? { tables } : {}),
+          ...(form?.snapshotMode ? { snapshotMode: form.snapshotMode } : {}),
+          ...(form?.createSlotIfNotExists === false ? { createSlotIfNotExists: false } : {}),
+          ...(form?.createPublicationIfNotExists === false ? { createPublicationIfNotExists: false } : {}),
+          ...(form?.heartbeatIntervalSeconds != null && form.heartbeatIntervalSeconds !== ''
+            ? { heartbeatIntervalSeconds: Number(form.heartbeatIntervalSeconds) }
+            : {}),
+          ...(form?.primaryKeyColumn ? { primaryKeyColumn: form.primaryKeyColumn } : {}),
+          ...(includeColumns.length ? { includeColumns } : {}),
+          ...(excludeColumns.length ? { excludeColumns } : {}),
+          ...(form?.envelopeFormat && form.envelopeFormat !== 'row'
+            ? { envelopeFormat: form.envelopeFormat }
+            : {}),
+        }
+        break
+      }
       case 'trino':
         base = {
           ...(form?.serverURL ? { serverURL: form.serverURL } : {}),

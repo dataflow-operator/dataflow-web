@@ -145,6 +145,95 @@
         </div>
       </template>
 
+      <!-- PostgreSQL CDC (source only) -->
+      <template v-else-if="connectorType === 'postgresql-cdc'">
+        <div class="form-group">
+          <label>{{ t('flow.pgConnectionString') }}</label>
+          <input
+            v-model="form.connectionString"
+            type="password"
+            class="form-input"
+            autocomplete="off"
+            :placeholder="t('flow.pgConnectionStringPlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.pgCdcSlotName') }}</label>
+          <input
+            v-model="form.slotName"
+            type="text"
+            class="form-input"
+            :placeholder="t('flow.pgCdcSlotNamePlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.pgCdcPublicationName') }}</label>
+          <input
+            v-model="form.publicationName"
+            type="text"
+            class="form-input"
+            :placeholder="t('flow.pgCdcPublicationNamePlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.pgCdcTables') }}</label>
+          <textarea
+            v-model="form.tables"
+            rows="3"
+            class="form-input"
+            :placeholder="t('flow.pgCdcTablesPlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.pgCdcSnapshotMode') }}</label>
+          <select v-model="form.snapshotMode" class="form-select">
+            <option value="initial">initial</option>
+            <option value="never">never</option>
+            <option value="always">always</option>
+          </select>
+        </div>
+        <div class="form-group form-row">
+          <label class="checkbox-label">
+            <input v-model="form.createSlotIfNotExists" type="checkbox" />
+            {{ t('flow.pgCdcCreateSlot') }}
+          </label>
+        </div>
+        <div class="form-group form-row">
+          <label class="checkbox-label">
+            <input v-model="form.createPublicationIfNotExists" type="checkbox" />
+            {{ t('flow.pgCdcCreatePublication') }}
+          </label>
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.pgCdcHeartbeatInterval') }}</label>
+          <input v-model.number="form.heartbeatIntervalSeconds" type="number" class="form-input form-input-sm" min="0" />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.pgCdcPrimaryKeyColumn') }}</label>
+          <input
+            v-model="form.primaryKeyColumn"
+            type="text"
+            class="form-input"
+            :placeholder="t('flow.pgCdcPrimaryKeyColumnPlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.pgCdcIncludeColumns') }}</label>
+          <textarea v-model="form.includeColumns" rows="2" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.pgCdcExcludeColumns') }}</label>
+          <textarea v-model="form.excludeColumns" rows="2" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.pgCdcEnvelopeFormat') }}</label>
+          <select v-model="form.envelopeFormat" class="form-select">
+            <option value="row">row</option>
+            <option value="debezium">debezium</option>
+          </select>
+        </div>
+      </template>
+
       <!-- Trino -->
       <template v-else-if="connectorType === 'trino'">
         <div class="form-group">

@@ -116,6 +116,41 @@ describe('useConfigForm', () => {
       expect(result.pollInterval).toBe(10)
     })
 
+    it('PostgreSQL CDC source round-trip', () => {
+      const config = {
+        connectionString: 'postgres://repl@pg:5432/db?sslmode=disable',
+        slotName: 'dataflow_slot',
+        publicationName: 'dataflow_pub',
+        tables: ['public.orders', 'public.customers'],
+        snapshotMode: 'initial',
+        createSlotIfNotExists: false,
+        createPublicationIfNotExists: false,
+        heartbeatIntervalSeconds: 15,
+        primaryKeyColumn: 'order_id',
+        includeColumns: ['id', 'name'],
+        excludeColumns: ['internal_note'],
+        envelopeFormat: 'debezium',
+      }
+      const form = configToForm(config, 'postgresql-cdc', 'source')
+      expect(form.tables).toBe('public.orders\npublic.customers')
+      expect(form.createSlotIfNotExists).toBe(false)
+      expect(form.createPublicationIfNotExists).toBe(false)
+      expect(form.primaryKeyColumn).toBe('order_id')
+      expect(form.includeColumns).toBe('id\nname')
+      expect(form.excludeColumns).toBe('internal_note')
+      expect(form.envelopeFormat).toBe('debezium')
+
+      const result = formToConfig(form, 'postgresql-cdc', 'source', {})
+      expect(result.tables).toEqual(['public.orders', 'public.customers'])
+      expect(result.createSlotIfNotExists).toBe(false)
+      expect(result.createPublicationIfNotExists).toBe(false)
+      expect(result.heartbeatIntervalSeconds).toBe(15)
+      expect(result.primaryKeyColumn).toBe('order_id')
+      expect(result.includeColumns).toEqual(['id', 'name'])
+      expect(result.excludeColumns).toEqual(['internal_note'])
+      expect(result.envelopeFormat).toBe('debezium')
+    })
+
     it('Trino source incremental round-trip', () => {
       const config = {
         serverURL: 'http://trino:8080',
