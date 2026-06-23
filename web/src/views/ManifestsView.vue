@@ -4,6 +4,22 @@
       <div class="card-header">
         <h2>{{ t('manifests.title') }}</h2>
         <div class="card-header-actions">
+          <button
+            type="button"
+            class="btn btn-warning"
+            :disabled="loading || actionInProgress"
+            @click="confirmStopAll"
+          >
+            {{ t('manifests.stopAll') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-success"
+            :disabled="loading || actionInProgress"
+            @click="confirmStartAll"
+          >
+            {{ t('manifests.startAll') }}
+          </button>
           <button class="btn btn-secondary" @click="openCreateInConstructor">
             {{ t('manifests.createInConstructor') }}
           </button>
@@ -47,10 +63,38 @@
                   <span :class="['status-badge', statusClass(df.status?.phase)]">
                     {{ df.status?.phase || 'Unknown' }}
                   </span>
+                  <span
+                    v-if="df.status?.maintenanceStatus?.inMaintenance"
+                    class="status-badge status-maintenance"
+                  >
+                    {{ t('manifests.maintenance') }}
+                  </span>
+                  <span
+                    v-if="isSuspended(df)"
+                    class="status-badge status-suspended"
+                  >
+                    {{ t('manifests.suspended') }}
+                  </span>
                 </td>
                 <td :data-label="t('manifests.processed')">{{ df.status?.processedCount ?? 0 }}</td>
                 <td :data-label="t('manifests.errors')">{{ df.status?.errorCount ?? 0 }}</td>
                 <td :data-label="t('manifests.actions')">
+                  <button
+                    type="button"
+                    class="btn btn-warning btn-sm"
+                    :disabled="actionInProgress || isSuspended(df)"
+                    @click="doStop(df.metadata.namespace, df.metadata.name)"
+                  >
+                    {{ t('manifests.stop') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-success btn-sm"
+                    :disabled="actionInProgress || !isSuspended(df)"
+                    @click="doStart(df.metadata.namespace, df.metadata.name)"
+                  >
+                    {{ t('manifests.start') }}
+                  </button>
                   <button
                     type="button"
                     class="btn btn-secondary btn-sm"
@@ -92,11 +136,11 @@
 
     <ConfirmModal
       :open="confirm.open"
-      :title="t('manifests.deleteTitle')"
+      :title="confirm.title || t('manifests.deleteTitle')"
       :message="confirm.message"
-      :confirm-label="t('common.delete')"
+      :confirm-label="confirm.confirmLabel || t('common.delete')"
       @cancel="confirm.open = false"
-      @confirm="doDelete"
+      @confirm="onConfirmAction"
     />
 
     <div v-if="constructorModal.open" class="constructor-modal-overlay" @click.self="constructorModal.open = false">
@@ -136,6 +180,10 @@ import {
   updateDataFlow,
   deleteDataFlow,
   listSecrets,
+  stopDataFlow,
+  startDataFlow,
+  stopAllDataFlows,
+  startAllDataFlows,
 } from '../api/client'
 import { sanitizeManifestForDisplay, mergeManifestForUpdate } from '../utils/manifest'
 
@@ -145,6 +193,7 @@ const { success, error: showError } = useToast()
 const { namespace } = useFilterQueryParams()
 const dataflows = ref([])
 const loading = ref(false)
+const actionInProgress = ref(false)
 const error = ref('')
 const searchQuery = ref('')
 
@@ -160,10 +209,19 @@ const yamlModal = ref({
 
 const confirm = ref({
   open: false,
+  action: 'delete',
   namespace: '',
   name: '',
   message: '',
+  title: '',
+  confirmLabel: '',
 })
+
+function isSuspended(df) {
+  return Boolean(
+    df?.spec?.maintenance?.suspended || df?.status?.maintenanceStatus?.suspended
+  )
+}
 
 const constructorModal = ref({
   open: false,
@@ -348,21 +406,100 @@ function onCreate(parsed, err) {
 function confirmDelete(ns, name) {
   confirm.value = {
     open: true,
+    action: 'delete',
     namespace: ns,
     name,
+    title: t('manifests.deleteTitle'),
+    confirmLabel: t('common.delete'),
     message: t('manifests.deleteConfirm', { name }),
   }
 }
 
-function doDelete() {
-  const { namespace: ns, name } = confirm.value
+function confirmStopAll() {
+  confirm.value = {
+    open: true,
+    action: 'stop-all',
+    namespace: namespace.value,
+    name: '',
+    title: t('manifests.stopAllTitle'),
+    confirmLabel: t('manifests.stopAll'),
+    message: t('manifests.stopAllConfirm'),
+  }
+}
+
+function confirmStartAll() {
+  confirm.value = {
+    open: true,
+    action: 'start-all',
+    namespace: namespace.value,
+    name: '',
+    title: t('manifests.startAllTitle'),
+    confirmLabel: t('manifests.startAll'),
+    message: t('manifests.startAllConfirm'),
+  }
+}
+
+async function doStop(ns, name) {
+  actionInProgress.value = true
+  try {
+    await stopDataFlow(ns, name)
+    success(t('manifests.stopped', { name }))
+    await loadDataFlows()
+  } catch (e) {
+    showError(e.message)
+  } finally {
+    actionInProgress.value = false
+  }
+}
+
+async function doStart(ns, name) {
+  actionInProgress.value = true
+  try {
+    await startDataFlow(ns, name)
+    success(t('manifests.started', { name }))
+    await loadDataFlows()
+  } catch (e) {
+    showError(e.message)
+  } finally {
+    actionInProgress.value = false
+  }
+}
+
+function onConfirmAction() {
+  const { action, namespace: ns, name } = confirm.value
   confirm.value.open = false
-  deleteDataFlow(ns, name)
-    .then(() => {
-      loadDataFlows()
-      success(t('manifests.deleted'))
+
+  if (action === 'delete') {
+    deleteDataFlow(ns, name)
+      .then(() => {
+        loadDataFlows()
+        success(t('manifests.deleted'))
+      })
+      .catch((e) => showError(e.message))
+    return
+  }
+
+  actionInProgress.value = true
+  const promise =
+    action === 'stop-all'
+      ? stopAllDataFlows(ns)
+      : action === 'start-all'
+        ? startAllDataFlows(ns)
+        : Promise.resolve()
+
+  promise
+    .then((result) => {
+      if (action === 'stop-all') {
+        success(t('manifests.stopAllDone', { count: result?.stopped ?? 0 }))
+      } else if (action === 'start-all') {
+        success(t('manifests.startAllDone', { count: result?.started ?? 0 }))
+      }
+      return loadDataFlows()
     })
     .catch((e) => showError(e.message))
+    .finally(() => {
+      actionInProgress.value = false
+    })
 }
 </script>
 
@@ -389,6 +526,21 @@ function doDelete() {
   font-size: 0.85rem;
   margin-right: 0.5rem;
   margin-bottom: 0.25rem;
+}
+
+.status-maintenance,
+.status-suspended {
+  margin-left: 0.35rem;
+}
+
+.status-maintenance {
+  background: #f59e0b;
+  color: #1f2937;
+}
+
+.status-suspended {
+  background: #ef4444;
+  color: white;
 }
 
 .empty-state {

@@ -67,6 +67,38 @@ export async function deleteDataFlow(namespace, name) {
   }
 }
 
+export async function stopDataFlow(namespace, name) {
+  return request(
+    `/dataflows/${encodeURIComponent(name)}/stop?namespace=${encodeURIComponent(namespace)}`,
+    { method: 'POST' }
+  )
+}
+
+export async function startDataFlow(namespace, name) {
+  return request(
+    `/dataflows/${encodeURIComponent(name)}/start?namespace=${encodeURIComponent(namespace)}`,
+    { method: 'POST' }
+  )
+}
+
+export async function stopAllDataFlows(namespace = 'default') {
+  return request(`/dataflows/stop-all?namespace=${encodeURIComponent(namespace)}`, {
+    method: 'POST',
+  })
+}
+
+export async function startAllDataFlows(namespace = 'default') {
+  return request(`/dataflows/start-all?namespace=${encodeURIComponent(namespace)}`, {
+    method: 'POST',
+  })
+}
+
+export async function getMaintenanceStatus(namespace, name) {
+  return request(
+    `/dataflows/${encodeURIComponent(name)}/maintenance?namespace=${encodeURIComponent(namespace)}`
+  )
+}
+
 export async function listDataFlowCrons(namespace = 'default') {
   return request(`/dataflowcrons?namespace=${encodeURIComponent(namespace)}`)
 }

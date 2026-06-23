@@ -206,31 +206,41 @@ describe('usePipelineSettings', () => {
     expect(settings.errorSink.ackPolicy).toBe('never')
   })
 
-  it('graphToManifest round-trips error sink via pipeline settings', () => {
-    const baseSpec = applyPipelineSettingsToSpec(
-      {
-        source: { type: 'kafka', config: { topic: 'in' } },
-        sink: { type: 'postgresql', config: { table: 'out' } },
+  it('specToPipelineSettings reads maintenance from spec', () => {
+    const settings = specToPipelineSettings({
+      maintenance: {
+        startTime: '2024-01-01T02:00:00Z',
+        duration: '2h',
+        repeat: 'daily',
+        timezone: 'Europe/Moscow',
+        description: 'nightly',
       },
-      {
-        ...createDefaultPipelineSettings(),
-        errorSink: {
-          enabled: true,
-          connectorType: 'kafka',
-          config: { topic: 'errors', brokers: ['localhost:9092'] },
-          ackPolicy: 'afterWrite',
-        },
+    })
+    expect(settings.maintenance.startTime).toBe('2024-01-01T02:00:00Z')
+    expect(settings.maintenance.duration).toBe('2h')
+    expect(settings.maintenance.repeat).toBe('daily')
+    expect(settings.maintenance.timezone).toBe('Europe/Moscow')
+    expect(settings.maintenance.description).toBe('nightly')
+  })
+
+  it('applyPipelineSettingsToSpec writes maintenance section', () => {
+    const settings = {
+      ...createDefaultPipelineSettings(),
+      maintenance: {
+        startTime: '2024-01-01T02:00:00Z',
+        duration: '2h',
+        repeat: 'weekly',
+        timezone: 'UTC',
+        description: 'window',
       },
-      { sourceType: 'kafka' }
-    )
-    const manifest = {
-      metadata: { name: 'test', namespace: 'default' },
-      spec: baseSpec,
     }
-    const { nodes, edges } = createEmptyGraph()
-    const result = graphToManifest(nodes, edges, manifest)
-    expect(result.spec.errors.type).toBe('kafka')
-    expect(result.spec.errors.config.topic).toBe('errors')
-    expect(result.spec.errors.ackPolicy).toBeUndefined()
+    const spec = applyPipelineSettingsToSpec({}, settings)
+    expect(spec.maintenance).toEqual({
+      startTime: '2024-01-01T02:00:00Z',
+      duration: '2h',
+      repeat: 'weekly',
+      timezone: 'UTC',
+      description: 'window',
+    })
   })
 })

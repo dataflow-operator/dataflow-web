@@ -37,6 +37,17 @@ export function createDefaultPipelineSettings() {
     replicas: 1,
     channelBufferSize: '',
     errorSink: createDefaultErrorSinkSettings(),
+    maintenance: createDefaultMaintenanceSettings(),
+  }
+}
+
+export function createDefaultMaintenanceSettings() {
+  return {
+    startTime: '',
+    duration: '',
+    repeat: '',
+    timezone: '',
+    description: '',
   }
 }
 
@@ -73,6 +84,16 @@ export function isValidDuration(value) {
  * @property {number} replicas
  * @property {number|string} channelBufferSize
  * @property {ErrorSinkSettings} errorSink
+ * @property {MaintenanceSettings} maintenance
+ */
+
+/**
+ * @typedef {Object} MaintenanceSettings
+ * @property {string} startTime
+ * @property {string} duration
+ * @property {string} repeat
+ * @property {string} timezone
+ * @property {string} description
  */
 
 /**
@@ -136,6 +157,19 @@ export function specToPipelineSettings(spec = {}) {
     replicas: spec.replicas ?? defaults.replicas,
     channelBufferSize: spec.channelBufferSize ?? '',
     errorSink: specToErrorSinkSettings(spec.errors),
+    maintenance: specToMaintenanceSettings(spec.maintenance),
+  }
+}
+
+function specToMaintenanceSettings(maintenance) {
+  const defaults = createDefaultMaintenanceSettings()
+  if (!maintenance) return defaults
+  return {
+    startTime: maintenance.startTime || '',
+    duration: maintenance.duration || '',
+    repeat: maintenance.repeat || '',
+    timezone: maintenance.timezone || '',
+    description: maintenance.description || '',
   }
 }
 
@@ -215,7 +249,35 @@ export function applyPipelineSettingsToSpec(spec, settings, options = {}) {
     delete next.errors
   }
 
+  const maintenance = maintenanceSettingsToSpec(settings.maintenance)
+  if (maintenance) {
+    next.maintenance = maintenance
+  } else {
+    delete next.maintenance
+  }
+
   return next
+}
+
+function maintenanceSettingsToSpec(maintenance) {
+  if (!maintenance) return undefined
+  const startTime = (maintenance.startTime || '').trim()
+  const duration = (maintenance.duration || '').trim()
+  const repeat = (maintenance.repeat || '').trim()
+  const timezone = (maintenance.timezone || '').trim()
+  const description = (maintenance.description || '').trim()
+
+  if (!startTime && !duration && !repeat && !timezone && !description) {
+    return undefined
+  }
+
+  const out = {}
+  if (startTime) out.startTime = startTime
+  if (duration) out.duration = duration
+  if (repeat) out.repeat = repeat
+  if (timezone) out.timezone = timezone
+  if (description) out.description = description
+  return out
 }
 
 /**

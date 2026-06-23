@@ -108,13 +108,29 @@ func (h *APIHandler) handleDataFlows(w http.ResponseWriter, r *http.Request, par
 
 	switch r.Method {
 	case "GET":
-		if len(parts) == 0 {
+		if len(parts) == 2 && parts[1] == "maintenance" {
+			h.getMaintenanceStatus(w, r, namespace, parts[0])
+		} else if len(parts) == 0 {
 			h.listDataFlows(w, r, namespace)
-		} else {
+		} else if len(parts) == 1 {
 			h.getDataFlow(w, r, namespace, parts[0])
+		} else {
+			http.Error(w, "Not found", http.StatusNotFound)
 		}
 	case "POST":
-		h.createDataFlow(w, r, namespace)
+		if len(parts) == 1 && parts[0] == "stop-all" {
+			h.stopAllDataFlows(w, r, namespace)
+		} else if len(parts) == 1 && parts[0] == "start-all" {
+			h.startAllDataFlows(w, r, namespace)
+		} else if len(parts) == 2 && parts[1] == "stop" {
+			h.stopDataFlow(w, r, namespace, parts[0])
+		} else if len(parts) == 2 && parts[1] == "start" {
+			h.startDataFlow(w, r, namespace, parts[0])
+		} else if len(parts) == 0 {
+			h.createDataFlow(w, r, namespace)
+		} else {
+			http.Error(w, "Not found", http.StatusNotFound)
+		}
 	case "PUT":
 		if len(parts) > 0 {
 			h.updateDataFlow(w, r, namespace, parts[0])

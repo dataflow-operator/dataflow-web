@@ -6,6 +6,11 @@ import {
   createDataFlow,
   updateDataFlow,
   deleteDataFlow,
+  stopDataFlow,
+  startDataFlow,
+  stopAllDataFlows,
+  startAllDataFlows,
+  getMaintenanceStatus,
   getLogs,
   getStatus,
   getRuntime,
@@ -80,6 +85,53 @@ describe('API client', () => {
       expect.stringContaining('/dataflows/df1'),
       expect.objectContaining({ method: 'DELETE' })
     )
+  })
+
+  it('stopDataFlow and startDataFlow send POST', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ status: 'stopping' }) })
+    await stopDataFlow('default', 'df1')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/dataflows/df1/stop'),
+      expect.objectContaining({ method: 'POST' })
+    )
+
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ status: 'starting' }) })
+    await startDataFlow('default', 'df1')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/dataflows/df1/start'),
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('stopAllDataFlows and startAllDataFlows send POST', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ stopped: 2, failed: 0 }) })
+    const stopResult = await stopAllDataFlows('default')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/dataflows/stop-all'),
+      expect.objectContaining({ method: 'POST' })
+    )
+    expect(stopResult.stopped).toBe(2)
+
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ started: 1, failed: 0 }) })
+    const startResult = await startAllDataFlows('default')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/dataflows/start-all'),
+      expect.objectContaining({ method: 'POST' })
+    )
+    expect(startResult.started).toBe(1)
+  })
+
+  it('getMaintenanceStatus fetches maintenance endpoint', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ suspended: true, inMaintenance: false }),
+    })
+    const result = await getMaintenanceStatus('default', 'df1')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/dataflows/df1/maintenance'),
+      expect.any(Object)
+    )
+    expect(result.suspended).toBe(true)
   })
 
   it('getLogs returns text', async () => {

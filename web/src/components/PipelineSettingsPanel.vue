@@ -99,6 +99,61 @@
           <p v-else class="field-hint">{{ t('flow.pipelineSettingsReplicasHint') }}</p>
         </div>
       </section>
+
+      <section class="settings-section">
+        <h4 class="section-title">{{ t('flow.pipelineSettingsMaintenance') }}</h4>
+        <div class="form-group">
+          <label for="maintenance-start-time">{{ t('flow.pipelineSettingsMaintenanceStartTime') }}</label>
+          <input
+            id="maintenance-start-time"
+            v-model="local.maintenance.startTime"
+            type="text"
+            :placeholder="t('flow.pipelineSettingsMaintenanceStartTimePlaceholder')"
+          />
+          <p class="field-hint">{{ t('flow.pipelineSettingsMaintenanceStartTimeHint') }}</p>
+        </div>
+        <div class="form-group">
+          <label for="maintenance-duration">{{ t('flow.pipelineSettingsMaintenanceDuration') }}</label>
+          <input
+            id="maintenance-duration"
+            v-model="local.maintenance.duration"
+            type="text"
+            :placeholder="t('flow.pipelineSettingsMaintenanceDurationPlaceholder')"
+            :class="{ 'input-invalid': maintenanceDurationInvalid }"
+          />
+          <p v-if="maintenanceDurationInvalid" class="field-error">
+            {{ t('flow.pipelineSettingsInvalidDuration') }}
+          </p>
+          <p v-else class="field-hint">{{ t('flow.pipelineSettingsMaintenanceDurationHint') }}</p>
+        </div>
+        <div class="form-group">
+          <label for="maintenance-repeat">{{ t('flow.pipelineSettingsMaintenanceRepeat') }}</label>
+          <select id="maintenance-repeat" v-model="local.maintenance.repeat">
+            <option value="">{{ t('flow.pipelineSettingsMaintenanceRepeatOnce') }}</option>
+            <option value="daily">{{ t('flow.pipelineSettingsMaintenanceRepeatDaily') }}</option>
+            <option value="weekly">{{ t('flow.pipelineSettingsMaintenanceRepeatWeekly') }}</option>
+            <option value="monthly">{{ t('flow.pipelineSettingsMaintenanceRepeatMonthly') }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="maintenance-timezone">{{ t('flow.pipelineSettingsMaintenanceTimezone') }}</label>
+          <input
+            id="maintenance-timezone"
+            v-model="local.maintenance.timezone"
+            type="text"
+            :placeholder="t('flow.pipelineSettingsMaintenanceTimezonePlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label for="maintenance-description">{{ t('flow.pipelineSettingsMaintenanceDescription') }}</label>
+          <input
+            id="maintenance-description"
+            v-model="local.maintenance.description"
+            type="text"
+          />
+        </div>
+      </section>
+
       <section class="settings-section">
         <h4 class="section-title">{{ t('flow.pipelineSettingsErrorSink') }}</h4>
         <div class="form-group checkbox-group">
@@ -153,6 +208,7 @@ import {
   ERROR_ACK_POLICIES,
   createDefaultPipelineSettings,
   createDefaultErrorSinkSettings,
+  createDefaultMaintenanceSettings,
   isReplicasSupported,
   isValidDuration,
   formatDurationForInput,
@@ -185,6 +241,10 @@ function syncFromProps(value) {
     errorSink: {
       ...createDefaultErrorSinkSettings(),
       ...(next.errorSink || {}),
+    },
+    maintenance: {
+      ...createDefaultMaintenanceSettings(),
+      ...(next.maintenance || {}),
     },
   })
   errorSinkStructuredConfig.value = configToForm(
@@ -250,6 +310,11 @@ const replicasEnabled = computed(() => isReplicasSupported(props.sourceType))
 
 const intervalInvalid = computed(() => {
   const value = formatDurationForInput(local.checkpointSaveInterval)
+  return value !== '' && !isValidDuration(value)
+})
+
+const maintenanceDurationInvalid = computed(() => {
+  const value = (local.maintenance?.duration || '').trim()
   return value !== '' && !isValidDuration(value)
 })
 
