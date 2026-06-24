@@ -1,5 +1,9 @@
 ## Commits
 
+- 4665a10 chore: add .dockerignore and update Dockerfile for improved build context
+
+## Commits
+
 - 0d5dad0 chore: update go.mod and go.sum to remove local dataflow replacement and add new dataflow dependency
 
 ## Commits
