@@ -1,0 +1,39 @@
+# Frontend
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Go
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+# Other
+*.md
+Taskfile.yml
+.releaserc.json
+CHANGELOG.md
+README.md
+scripts/

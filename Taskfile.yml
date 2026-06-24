@@ -115,11 +115,11 @@ tasks:
     cmds:
       - go test ./internal/gui/... -count=1
 
-  # Build Docker image
+  # Build Docker image (from repo root context for CI compatibility)
   docker:
-    desc: Build Docker image dataflow-web
+    desc: Build Docker image dataflow-web (requires repo root as context)
     cmds:
-      - docker build -t dataflow-web:local .
+      - docker build -f Dockerfile -t dataflow-web:local ..
 
   default:
     desc: List available tasks

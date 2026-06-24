@@ -14,15 +14,16 @@ WORKDIR /workspace
 
 RUN apk add --no-cache git
 
-COPY go.* ./
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    go mod download
+
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
 
 COPY --from=frontend /workspace/web/dist ./static
 
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -o server ./cmd/server
 

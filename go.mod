@@ -3,7 +3,7 @@ module github.com/dataflow-operator/dataflow-web
 go 1.25.0
 
 require (
-	github.com/dataflow-operator/dataflow v1.0.29
+	github.com/dataflow-operator/dataflow v1.4.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/zapr v1.3.0
 	go.uber.org/zap v1.27.1
