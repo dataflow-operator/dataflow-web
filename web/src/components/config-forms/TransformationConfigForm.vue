@@ -167,6 +167,188 @@
         </div>
       </template>
 
+      <!-- debeziumUnwrap -->
+      <template v-else-if="transformationType === 'debeziumUnwrap'">
+        <div class="form-group form-row">
+          <label class="checkbox-label">
+            <input v-model="form.inferDeleteFromTombstone" type="checkbox" />
+            {{ t('flow.debeziumInferDeleteFromTombstone') }}
+          </label>
+        </div>
+        <div class="form-group form-row">
+          <label class="checkbox-label">
+            <input v-model="form.includeSourceInMetadata" type="checkbox" />
+            {{ t('flow.debeziumIncludeSourceInMetadata') }}
+          </label>
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.debeziumSnapshotOperation') }}</label>
+          <select v-model="form.snapshotOperation" class="form-select">
+            <option value="insert">insert</option>
+            <option value="update">update</option>
+          </select>
+        </div>
+        <div class="form-group form-row">
+          <label class="checkbox-label">
+            <input v-model="form.addOperationFields" type="checkbox" />
+            {{ t('flow.debeziumAddOperationFields') }}
+          </label>
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.debeziumAddSourceFields') }}</label>
+          <textarea
+            v-model="form.addSourceFields"
+            rows="3"
+            class="form-input"
+            :placeholder="t('flow.debeziumAddSourceFieldsPlaceholder')"
+          />
+        </div>
+        <p class="form-hint">{{ t('flow.debeziumUnwrapHint') }}</p>
+      </template>
+
+      <!-- replaceField -->
+      <template v-else-if="transformationType === 'replaceField'">
+        <div class="form-group">
+          <label>{{ t('flow.replaceFieldRenames') }}</label>
+          <textarea
+            v-model="form.renames"
+            rows="3"
+            class="form-input"
+            :placeholder="t('flow.replaceFieldRenamesPlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.replaceFieldInclude') }}</label>
+          <textarea
+            v-model="form.include"
+            rows="3"
+            class="form-input"
+            :placeholder="t('flow.replaceFieldIncludePlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.replaceFieldExclude') }}</label>
+          <textarea
+            v-model="form.exclude"
+            rows="3"
+            class="form-input"
+            :placeholder="t('flow.replaceFieldExcludePlaceholder')"
+          />
+        </div>
+        <p class="form-hint">{{ t('flow.replaceFieldHint') }}</p>
+      </template>
+
+      <!-- headersToPayload -->
+      <template v-else-if="transformationType === 'headersToPayload'">
+        <div class="form-group">
+          <label>{{ t('flow.headersToPayloadMappings') }}</label>
+          <textarea
+            v-model="form.mappings"
+            rows="3"
+            class="form-input"
+            :placeholder="t('flow.headersToPayloadMappingsPlaceholder')"
+          />
+        </div>
+        <p class="form-hint">{{ t('flow.headersToPayloadHint') }}</p>
+      </template>
+
+      <!-- structFlatten -->
+      <template v-else-if="transformationType === 'structFlatten'">
+        <div class="form-group">
+          <label>{{ t('flow.structFlattenDelimiter') }}</label>
+          <input
+            v-model="form.delimiter"
+            type="text"
+            class="form-input"
+            :placeholder="t('flow.structFlattenDelimiterPlaceholder')"
+          />
+        </div>
+        <p class="form-hint">{{ t('flow.structFlattenHint') }}</p>
+      </template>
+
+      <!-- extractField -->
+      <template v-else-if="transformationType === 'extractField'">
+        <div class="form-group">
+          <label>{{ t('flow.extractFieldField') }}</label>
+          <input
+            v-model="form.field"
+            type="text"
+            class="form-input"
+            :placeholder="t('flow.extractFieldFieldPlaceholder')"
+          />
+        </div>
+        <p class="form-hint">{{ t('flow.extractFieldHint') }}</p>
+      </template>
+
+      <!-- hoistField -->
+      <template v-else-if="transformationType === 'hoistField'">
+        <div class="form-group">
+          <label>{{ t('flow.hoistFieldField') }}</label>
+          <input
+            v-model="form.field"
+            type="text"
+            class="form-input"
+            :placeholder="t('flow.hoistFieldFieldPlaceholder')"
+          />
+        </div>
+        <p class="form-hint">{{ t('flow.hoistFieldHint') }}</p>
+      </template>
+
+      <!-- cast -->
+      <template v-else-if="transformationType === 'cast'">
+        <div class="form-group">
+          <label>{{ t('flow.castSpec') }}</label>
+          <textarea
+            v-model="form.spec"
+            rows="5"
+            class="form-input"
+            :placeholder="t('flow.castSpecPlaceholder')"
+          />
+        </div>
+        <p class="form-hint">{{ t('flow.castHint') }}</p>
+      </template>
+
+      <!-- timezone -->
+      <template v-else-if="transformationType === 'timezone'">
+        <div class="form-group">
+          <label>{{ t('flow.timezoneTimezone') }}</label>
+          <input
+            v-model="form.timezone"
+            type="text"
+            class="form-input"
+            :placeholder="t('flow.timezoneTimezonePlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.timezoneFields') }}</label>
+          <textarea
+            v-model="form.fields"
+            rows="3"
+            class="form-input"
+            :placeholder="t('flow.timezoneFieldsPlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.timezoneSourceTimezone') }}</label>
+          <input
+            v-model="form.sourceTimezone"
+            type="text"
+            class="form-input"
+            :placeholder="t('flow.timezoneSourceTimezonePlaceholder')"
+          />
+        </div>
+        <div class="form-group">
+          <label>{{ t('flow.timezoneFormat') }}</label>
+          <input
+            v-model="form.format"
+            type="text"
+            class="form-input"
+            :placeholder="t('flow.timezoneFormatPlaceholder')"
+          />
+        </div>
+        <p class="form-hint">{{ t('flow.timezoneHint') }}</p>
+      </template>
+
       <div v-if="needsAdvancedOption" class="form-group form-row advanced-toggle">
         <label class="checkbox-label">
           <input v-model="showAdvanced" type="checkbox" />
@@ -204,7 +386,7 @@ const showAdvanced = ref(false)
 const connectorTypes = CONNECTOR_TYPES
 
 const needsAdvancedOption = computed(() =>
-  ['timestamp', 'flatten', 'filter', 'select', 'remove', 'mask', 'snakeCase', 'camelCase', 'router'].includes(
+  ['timestamp', 'flatten', 'filter', 'select', 'remove', 'mask', 'snakeCase', 'camelCase', 'debeziumUnwrap', 'router', 'replaceField', 'headersToPayload', 'structFlatten', 'extractField', 'hoistField', 'cast', 'timezone'].includes(
     props.transformationType
   )
 )

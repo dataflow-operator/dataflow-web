@@ -152,6 +152,14 @@ describe('useFlowManifest', () => {
     expect(CONNECTOR_TYPES).toContain('iceberg')
     expect(TRANSFORMATION_TYPES).toContain('timestamp')
     expect(TRANSFORMATION_TYPES).toContain('flatten')
+    expect(TRANSFORMATION_TYPES).toContain('replaceField')
+    expect(TRANSFORMATION_TYPES).toContain('headersToPayload')
+    expect(TRANSFORMATION_TYPES).toContain('structFlatten')
+    expect(TRANSFORMATION_TYPES).toContain('debeziumUnwrap')
+    expect(TRANSFORMATION_TYPES).toContain('extractField')
+    expect(TRANSFORMATION_TYPES).toContain('hoistField')
+    expect(TRANSFORMATION_TYPES).toContain('cast')
+    expect(TRANSFORMATION_TYPES).toContain('timezone')
   })
 
   it('manifestToGraph round-trips iceberg source and sink', () => {

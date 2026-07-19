@@ -391,7 +391,21 @@ const TRANSFORMATION_KNOWN_KEYS = {
   mask: ['fields', 'keepLength'],
   snakeCase: ['deep'],
   camelCase: ['deep'],
+  debeziumUnwrap: [
+    'inferDeleteFromTombstone',
+    'includeSourceInMetadata',
+    'snapshotOperation',
+    'addOperationFields',
+    'addSourceFields',
+  ],
   router: ['routes'],
+  replaceField: ['renames', 'include', 'exclude'],
+  headersToPayload: ['mappings'],
+  structFlatten: ['delimiter'],
+  extractField: ['field'],
+  hoistField: ['field'],
+  cast: ['spec'],
+  timezone: ['timezone', 'fields', 'sourceTimezone', 'format'],
 }
 
 function emptyRouterRoute() {
@@ -485,6 +499,52 @@ export function transformationConfigToForm(config, transformationType) {
         deep: !!c.deep,
         advancedJson,
       }
+    case 'debeziumUnwrap':
+      return {
+        inferDeleteFromTombstone: !!c.inferDeleteFromTombstone,
+        includeSourceInMetadata: !!c.includeSourceInMetadata,
+        snapshotOperation: c.snapshotOperation || 'insert',
+        addOperationFields: !!c.addOperationFields,
+        addSourceFields: Array.isArray(c.addSourceFields) ? c.addSourceFields.join('\n') : '',
+        advancedJson,
+      }
+    case 'replaceField':
+      return {
+        renames: Array.isArray(c.renames) ? c.renames.join('\n') : '',
+        include: Array.isArray(c.include) ? c.include.join('\n') : '',
+        exclude: Array.isArray(c.exclude) ? c.exclude.join('\n') : '',
+        advancedJson,
+      }
+    case 'headersToPayload':
+      return {
+        mappings: Array.isArray(c.mappings) ? c.mappings.join('\n') : '',
+        advancedJson,
+      }
+    case 'structFlatten':
+      return {
+        delimiter: c.delimiter || '.',
+        advancedJson,
+      }
+    case 'extractField':
+    case 'hoistField':
+      return { field: c.field || '', advancedJson }
+    case 'cast':
+      return {
+        spec: c.spec && typeof c.spec === 'object' && !Array.isArray(c.spec)
+          ? Object.entries(c.spec)
+              .map(([path, type]) => `${path}:${type}`)
+              .join('\n')
+          : '',
+        advancedJson,
+      }
+    case 'timezone':
+      return {
+        timezone: c.timezone || '',
+        fields: Array.isArray(c.fields) ? c.fields.join('\n') : '',
+        sourceTimezone: c.sourceTimezone || '',
+        format: c.format || '',
+        advancedJson,
+      }
     case 'router':
       if (routerConfigHasSecretRefs(c)) {
         return { useAdvanced: true, advancedJson: JSON.stringify(c, null, 2) }
@@ -558,6 +618,80 @@ export function transformationFormToConfig(form, transformationType, advancedCon
       case 'snakeCase':
       case 'camelCase':
         base = form && 'deep' in form ? { deep: !!form.deep } : {}
+        break
+      case 'debeziumUnwrap': {
+        const addSourceFields = (form?.addSourceFields || '')
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        base = {
+          ...(form?.inferDeleteFromTombstone ? { inferDeleteFromTombstone: true } : {}),
+          ...(form?.includeSourceInMetadata ? { includeSourceInMetadata: true } : {}),
+          ...(form?.snapshotOperation && form.snapshotOperation !== 'insert'
+            ? { snapshotOperation: form.snapshotOperation }
+            : {}),
+          ...(form?.addOperationFields ? { addOperationFields: true } : {}),
+          ...(addSourceFields.length > 0 ? { addSourceFields } : {}),
+        }
+        break
+      }
+      case 'replaceField': {
+        const lines = (text) =>
+          (text || '')
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        const renames = lines(form?.renames)
+        const include = lines(form?.include)
+        const exclude = lines(form?.exclude)
+        base = {
+          ...(renames.length > 0 ? { renames } : {}),
+          ...(include.length > 0 ? { include } : {}),
+          ...(exclude.length > 0 ? { exclude } : {}),
+        }
+        break
+      }
+      case 'headersToPayload':
+        base = {
+          mappings: (form?.mappings || '')
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean),
+        }
+        break
+      case 'structFlatten':
+        base = {
+          ...(form?.delimiter && form.delimiter !== '.' ? { delimiter: form.delimiter } : {}),
+        }
+        break
+      case 'extractField':
+      case 'hoistField':
+        base = form?.field ? { field: form.field } : {}
+        break
+      case 'cast': {
+        const spec = {}
+        for (const line of (form?.spec || '').split('\n')) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          const colon = trimmed.indexOf(':')
+          if (colon <= 0) continue
+          const path = trimmed.slice(0, colon).trim()
+          const type = trimmed.slice(colon + 1).trim()
+          if (path && type) spec[path] = type
+        }
+        base = Object.keys(spec).length > 0 ? { spec } : {}
+        break
+      }
+      case 'timezone':
+        base = {
+          ...(form?.timezone ? { timezone: form.timezone } : {}),
+          fields: (form?.fields || '')
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean),
+          ...(form?.sourceTimezone ? { sourceTimezone: form.sourceTimezone } : {}),
+          ...(form?.format ? { format: form.format } : {}),
+        }
         break
       case 'router':
         base = {

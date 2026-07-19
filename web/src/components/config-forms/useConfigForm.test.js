@@ -454,5 +454,101 @@ describe('useConfigForm', () => {
       const resultDeep = transformationFormToConfig(formDeep, 'camelCase', {})
       expect(resultDeep).toEqual({ deep: true })
     })
+
+    it('debeziumUnwrap round-trip', () => {
+      const config = {
+        inferDeleteFromTombstone: true,
+        includeSourceInMetadata: true,
+        snapshotOperation: 'update',
+        addOperationFields: true,
+        addSourceFields: ['table', 'lsn'],
+      }
+      const form = transformationConfigToForm(config, 'debeziumUnwrap')
+      expect(form.inferDeleteFromTombstone).toBe(true)
+      expect(form.includeSourceInMetadata).toBe(true)
+      expect(form.snapshotOperation).toBe('update')
+      expect(form.addOperationFields).toBe(true)
+      expect(form.addSourceFields).toBe('table\nlsn')
+
+      expect(transformationFormToConfig(form, 'debeziumUnwrap', {})).toEqual(config)
+
+      const defaults = transformationConfigToForm({}, 'debeziumUnwrap')
+      expect(defaults.snapshotOperation).toBe('insert')
+      expect(transformationFormToConfig(defaults, 'debeziumUnwrap', {})).toEqual({})
+    })
+
+    it('replaceField round-trip', () => {
+      const config = {
+        renames: ['oldName:newName', 'key.sku:sku'],
+        include: ['id', 'name'],
+      }
+      const form = transformationConfigToForm(config, 'replaceField')
+      expect(form.renames).toBe('oldName:newName\nkey.sku:sku')
+      expect(form.include).toBe('id\nname')
+      expect(form.exclude).toBe('')
+
+      const result = transformationFormToConfig(form, 'replaceField', {})
+      expect(result).toEqual(config)
+    })
+
+    it('headersToPayload round-trip', () => {
+      const config = {
+        mappings: ['X-Request-Id:requestId', 'X-Language:metadata.language'],
+      }
+      const form = transformationConfigToForm(config, 'headersToPayload')
+      expect(form.mappings).toBe('X-Request-Id:requestId\nX-Language:metadata.language')
+
+      const result = transformationFormToConfig(form, 'headersToPayload', {})
+      expect(result).toEqual(config)
+    })
+
+    it('structFlatten round-trip', () => {
+      const formDefault = transformationConfigToForm({}, 'structFlatten')
+      expect(formDefault.delimiter).toBe('.')
+      expect(transformationFormToConfig(formDefault, 'structFlatten', {})).toEqual({})
+
+      const config = { delimiter: '_' }
+      const form = transformationConfigToForm(config, 'structFlatten')
+      expect(form.delimiter).toBe('_')
+      expect(transformationFormToConfig(form, 'structFlatten', {})).toEqual(config)
+    })
+
+    it('extractField round-trip', () => {
+      const config = { field: 'payload.after' }
+      const form = transformationConfigToForm(config, 'extractField')
+      expect(form.field).toBe('payload.after')
+      expect(transformationFormToConfig(form, 'extractField', {})).toEqual(config)
+    })
+
+    it('hoistField round-trip', () => {
+      const config = { field: 'record' }
+      const form = transformationConfigToForm(config, 'hoistField')
+      expect(form.field).toBe('record')
+      expect(transformationFormToConfig(form, 'hoistField', {})).toEqual(config)
+    })
+
+    it('cast round-trip', () => {
+      const config = { spec: { id: 'int64', amount: 'float64', active: 'bool' } }
+      const form = transformationConfigToForm(config, 'cast')
+      expect(form.spec).toContain('id:int64')
+      expect(form.spec).toContain('amount:float64')
+      expect(form.spec).toContain('active:bool')
+      expect(transformationFormToConfig(form, 'cast', {})).toEqual(config)
+    })
+
+    it('timezone round-trip', () => {
+      const config = {
+        timezone: 'Europe/Moscow',
+        fields: ['created_at', 'updated_at'],
+        sourceTimezone: 'UTC',
+        format: 'RFC3339',
+      }
+      const form = transformationConfigToForm(config, 'timezone')
+      expect(form.timezone).toBe('Europe/Moscow')
+      expect(form.fields).toBe('created_at\nupdated_at')
+      expect(form.sourceTimezone).toBe('UTC')
+      expect(form.format).toBe('RFC3339')
+      expect(transformationFormToConfig(form, 'timezone', {})).toEqual(config)
+    })
   })
 })

@@ -17,6 +17,14 @@ export const TRANSFORMATION_TYPES = [
   'remove',
   'snakeCase',
   'camelCase',
+  'debeziumUnwrap',
+  'replaceField',
+  'headersToPayload',
+  'structFlatten',
+  'extractField',
+  'hoistField',
+  'cast',
+  'timezone',
 ]
 
 /**
