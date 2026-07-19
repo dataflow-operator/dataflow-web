@@ -1,3 +1,9 @@
+## 0.3.0 (2026-07-19)
+
+## Commits
+
+- c4c64be feat: enhance transformation configuration with new options and localization
+
 ## Commits
 
 - 4665a10 chore: add .dockerignore and update Dockerfile for improved build context
