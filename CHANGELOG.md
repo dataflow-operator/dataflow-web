@@ -1,3 +1,9 @@
+## 0.4.0 (2026-07-20)
+
+## Commits
+
+- dc16de5 feat: add 'insertField' transformation type with form support and localization
+
 ## 0.3.0 (2026-07-19)
 
 ## Commits
