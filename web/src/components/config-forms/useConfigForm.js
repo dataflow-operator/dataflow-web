@@ -406,6 +406,7 @@ const TRANSFORMATION_KNOWN_KEYS = {
   hoistField: ['field'],
   cast: ['spec'],
   timezone: ['timezone', 'fields', 'sourceTimezone', 'format'],
+  insertField: ['fields'],
 }
 
 function emptyRouterRoute() {
@@ -543,6 +544,15 @@ export function transformationConfigToForm(config, transformationType) {
         fields: Array.isArray(c.fields) ? c.fields.join('\n') : '',
         sourceTimezone: c.sourceTimezone || '',
         format: c.format || '',
+        advancedJson,
+      }
+    case 'insertField':
+      return {
+        fields: c.fields && typeof c.fields === 'object' && !Array.isArray(c.fields)
+          ? Object.entries(c.fields)
+              .map(([path, value]) => `${path}:${value}`)
+              .join('\n')
+          : '',
         advancedJson,
       }
     case 'router':
@@ -693,6 +703,20 @@ export function transformationFormToConfig(form, transformationType, advancedCon
           ...(form?.format ? { format: form.format } : {}),
         }
         break
+      case 'insertField': {
+        const fields = {}
+        for (const line of (form?.fields || '').split('\n')) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          const colon = trimmed.indexOf(':')
+          if (colon <= 0) continue
+          const path = trimmed.slice(0, colon).trim()
+          const value = trimmed.slice(colon + 1).trim()
+          if (path) fields[path] = value
+        }
+        base = Object.keys(fields).length > 0 ? { fields } : {}
+        break
+      }
       case 'router':
         base = {
           routes: (form?.routes || [])

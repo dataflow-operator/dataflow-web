@@ -550,5 +550,20 @@ describe('useConfigForm', () => {
       expect(form.format).toBe('RFC3339')
       expect(transformationFormToConfig(form, 'timezone', {})).toEqual(config)
     })
+
+    it('insertField round-trip', () => {
+      const config = {
+        fields: {
+          pipeline: 'orders-cdc',
+          source_topic: '${metadata.topic}',
+          'flags.reprocessed': 'json:false',
+        },
+      }
+      const form = transformationConfigToForm(config, 'insertField')
+      expect(form.fields).toContain('pipeline:orders-cdc')
+      expect(form.fields).toContain('source_topic:${metadata.topic}')
+      expect(form.fields).toContain('flags.reprocessed:json:false')
+      expect(transformationFormToConfig(form, 'insertField', {})).toEqual(config)
+    })
   })
 })

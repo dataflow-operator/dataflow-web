@@ -349,6 +349,20 @@
         <p class="form-hint">{{ t('flow.timezoneHint') }}</p>
       </template>
 
+      <!-- insertField -->
+      <template v-else-if="transformationType === 'insertField'">
+        <div class="form-group">
+          <label>{{ t('flow.insertFieldFields') }}</label>
+          <textarea
+            v-model="form.fields"
+            rows="5"
+            class="form-input"
+            :placeholder="t('flow.insertFieldFieldsPlaceholder')"
+          />
+        </div>
+        <p class="form-hint">{{ t('flow.insertFieldHint') }}</p>
+      </template>
+
       <div v-if="needsAdvancedOption" class="form-group form-row advanced-toggle">
         <label class="checkbox-label">
           <input v-model="showAdvanced" type="checkbox" />
@@ -386,7 +400,7 @@ const showAdvanced = ref(false)
 const connectorTypes = CONNECTOR_TYPES
 
 const needsAdvancedOption = computed(() =>
-  ['timestamp', 'flatten', 'filter', 'select', 'remove', 'mask', 'snakeCase', 'camelCase', 'debeziumUnwrap', 'router', 'replaceField', 'headersToPayload', 'structFlatten', 'extractField', 'hoistField', 'cast', 'timezone'].includes(
+  ['timestamp', 'flatten', 'filter', 'select', 'remove', 'mask', 'snakeCase', 'camelCase', 'debeziumUnwrap', 'router', 'replaceField', 'headersToPayload', 'structFlatten', 'extractField', 'hoistField', 'cast', 'timezone', 'insertField'].includes(
     props.transformationType
   )
 )

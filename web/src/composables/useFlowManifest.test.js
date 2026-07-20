@@ -160,6 +160,7 @@ describe('useFlowManifest', () => {
     expect(TRANSFORMATION_TYPES).toContain('hoistField')
     expect(TRANSFORMATION_TYPES).toContain('cast')
     expect(TRANSFORMATION_TYPES).toContain('timezone')
+    expect(TRANSFORMATION_TYPES).toContain('insertField')
   })
 
   it('manifestToGraph round-trips iceberg source and sink', () => {

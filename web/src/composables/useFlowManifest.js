@@ -25,6 +25,7 @@ export const TRANSFORMATION_TYPES = [
   'hoistField',
   'cast',
   'timezone',
+  'insertField',
 ]
 
 /**
