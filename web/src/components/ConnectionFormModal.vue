@@ -155,6 +155,7 @@ const connectionTypes = computed(() => ({
   clickhouse: t('connections.connectionTypes.clickhouse'),
   nessie: t('connections.connectionTypes.nessie'),
   iceberg: t('connections.connectionTypes.iceberg'),
+  hive: t('connections.connectionTypes.hive'),
 }))
 
 const currentFields = computed(() => {

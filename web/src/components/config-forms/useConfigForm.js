@@ -21,7 +21,7 @@ const CONNECTOR_KNOWN_KEYS = {
 
 export const SINK_IDEMPOTENCY_CONNECTORS = ['postgresql', 'trino', 'clickhouse', 'iceberg']
 
-export const POLLING_SOURCE_TYPES = ['postgresql', 'postgresql-cdc', 'clickhouse', 'trino', 'nessie', 'iceberg']
+export const POLLING_SOURCE_TYPES = ['postgresql', 'postgresql-cdc', 'clickhouse', 'trino', 'nessie', 'iceberg', 'hive']
 
 /**
  * Check if config uses SecretRef (from Connection selection) - cannot fully populate structured form

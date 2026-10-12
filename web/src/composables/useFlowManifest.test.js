@@ -150,6 +150,7 @@ describe('useFlowManifest', () => {
     expect(CONNECTOR_TYPES).toContain('kafka')
     expect(CONNECTOR_TYPES).toContain('postgresql')
     expect(CONNECTOR_TYPES).toContain('iceberg')
+    expect(CONNECTOR_TYPES).toContain('hive')
     expect(TRANSFORMATION_TYPES).toContain('timestamp')
     expect(TRANSFORMATION_TYPES).toContain('flatten')
     expect(TRANSFORMATION_TYPES).toContain('replaceField')

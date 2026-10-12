@@ -229,6 +229,7 @@ export default {
       clickhouse: 'ClickHouse',
       nessie: 'Nessie',
       iceberg: 'Iceberg',
+      hive: 'Hive',
     },
     updated: 'Connection updated',
     created: 'Connection created',
