@@ -1,3 +1,9 @@
+## 0.5.0 (2026-10-12)
+
+## Commits
+
+- cd1ce43 feat: add support for 'hive' connector type
+
 ## 0.4.0 (2026-07-20)
 
 ## Commits
